@@ -1,4 +1,3 @@
 src/samples/
 docs/
-*.html
-screenshots/
+*.png
