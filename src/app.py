@@ -1,154 +1,206 @@
+"""
+ICT Buy-the-Dip — Flask Web App
+Background scanner with batch yfinance download and disk caching.
+"""
+
 from flask import Flask, render_template, request, Response, jsonify
-from ict_analyzer import analyze_stock
+from ict_analyzer import ICTAnalyzer, analyze_stock
+import yfinance as yf
 import pandas as pd
 import threading
 import time
 import os
 import gc
+import logging
 from datetime import datetime
+
+# ============ Logging ============
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%H:%M:%S',
+)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# ============ Demo Mode for Render ============
+# ============ Demo Mode ============
 DEMO_MODE = os.environ.get('DEMO_MODE', 'false').lower() == 'true'
-DEMO_TICKER_LIMIT = 20  # Max tickers to scan in demo mode
+DEMO_TICKER_LIMIT = 20
 
 # ============ Background Scanner Cache ============
-SCAN_CACHE = {}  # {symbol: {price, entry, dist, setup, timestamp}}
+SCAN_CACHE = {}  # {symbol: {price, entry, dist, setup, timestamp, rr_ratio}}
 SCAN_LOCK = threading.Lock()
 SCAN_STATUS = {
     'last_scan': None,
     'next_scan': None,
     'is_scanning': False,
     'scan_count': 0,
-    'demo_mode': DEMO_MODE
+    'demo_mode': DEMO_MODE,
 }
 
-# Longer interval in demo mode to reduce memory pressure
 SCAN_INTERVAL = 900 if DEMO_MODE else 300  # 15 min demo, 5 min normal
 
-# Default Watchlist (limited for demo)
-DEFAULT_WATCHLIST = [
-    "SPY", "IWM", "QQQ", "DIA",
-    "NVDA", "AAPL", "MSFT", "AMZN", "GOOGL"
-]
+DEFAULT_WATCHLIST = ["SPY", "IWM", "QQQ", "DIA", "NVDA", "AAPL", "MSFT", "AMZN", "GOOGL"]
 
-# Demo watchlist - popular tickers only
 DEMO_WATCHLIST = [
     "SPY", "QQQ", "IWM", "DIA",
     "NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "META",
     "TSLA", "AMD", "NFLX", "CRM", "ORCL",
-    "JPM", "V", "MA", "BAC", "GS"
+    "JPM", "V", "MA", "BAC", "GS",
 ]
+
 
 def load_watchlist():
     """Load tickers from tickers.txt or return default."""
-    # In demo mode, use limited watchlist
     if DEMO_MODE:
-        print(f"🎮 DEMO MODE: Using limited watchlist ({len(DEMO_WATCHLIST)} tickers)")
+        logger.info(f"DEMO MODE: Using limited watchlist ({len(DEMO_WATCHLIST)} tickers)")
         return DEMO_WATCHLIST
-    
+
     try:
-        # Look in current directory or src/
-        paths = ['tickers.txt', 'src/tickers.txt', '/Users/jerry/Projects/ICT/src/tickers.txt']
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        paths = [
+            os.path.join(script_dir, 'tickers.txt'),
+            'tickers.txt',
+            'src/tickers.txt',
+        ]
         for p in paths:
             if os.path.exists(p):
                 with open(p, 'r') as f:
                     tickers = [line.strip().upper() for line in f if line.strip() and not line.startswith('#')]
-                print(f"📋 Loaded {len(tickers)} tickers from {p}")
-                return list(set(tickers)) # Deduplicate
+                logger.info(f"Loaded {len(tickers)} tickers from {p}")
+                return list(set(tickers))
     except Exception as e:
-        print(f"⚠️ Error loading watchlist: {e}")
-    
-    print("⚠️ Using default watchlist")
+        logger.warning(f"Error loading watchlist: {e}")
+
+    logger.warning("Using default watchlist")
     return DEFAULT_WATCHLIST
 
+
 WATCHLIST = load_watchlist()
-print(f"🚀 Scanner initialized: DEMO_MODE={DEMO_MODE}, {len(WATCHLIST)} tickers, interval={SCAN_INTERVAL}s")
+logger.info(f"Scanner initialized: DEMO_MODE={DEMO_MODE}, {len(WATCHLIST)} tickers, interval={SCAN_INTERVAL}s")
 
 
 def run_scanner():
-    """Background scanner function - runs silently."""
+    """Background scanner — batch download + individual analysis."""
     global SCAN_CACHE, SCAN_STATUS, WATCHLIST
-    
-    # 1. Reload Watchlist (to pick up changes in tickers.txt)
+
     WATCHLIST = load_watchlist()
-    
+
     with SCAN_LOCK:
         SCAN_STATUS['is_scanning'] = True
-        
-        # 2. Clear Stale Cache (Remove tickers not in new watchlist)
+        # Clear stale tickers
         current_tickers = set(WATCHLIST)
-        cached_tickers = list(SCAN_CACHE.keys())
-        for t in cached_tickers:
+        for t in list(SCAN_CACHE.keys()):
             if t not in current_tickers:
                 del SCAN_CACHE[t]
-                print(f"🧹 [Background] Removed stale ticker from cache: {t}")
-    
-    print(f"🔄 [Background] Starting scan on {len(WATCHLIST)} tickers...")
-    new_results = {}
-    
+
+    logger.info(f"Starting scan on {len(WATCHLIST)} tickers...")
+
+    # Batch download OHLCV data for all tickers at once
+    try:
+        batch_data = yf.download(
+            WATCHLIST, period="2y", interval="1h",
+            group_by='ticker', progress=False, threads=True,
+        )
+        use_batch = batch_data is not None and not batch_data.empty
+    except Exception as e:
+        logger.warning(f"Batch download failed, falling back to individual: {e}")
+        use_batch = False
+        batch_data = None
+
     for ticker in WATCHLIST:
         try:
-            analyzer = analyze_stock(ticker, timeframe="4h")
-            
-            if analyzer and not analyzer.df.empty:
-                plan = analyzer.calculate_trade_plan()
-                current_price = analyzer.df['Close'].iloc[-1]
-                entry_price = plan['entry']
-                dist_pct = (current_price - entry_price) / current_price
-                
-                # Store all scanned tickers with their data
-                result = {
-                    'symbol': ticker,
-                    'price': float(current_price),
-                    'entry': float(entry_price),
-                    'dist': float(dist_pct * 100),
-                    'setup': plan['type'],
-                    'timestamp': datetime.now().isoformat(),
-                    'near_entry': bool(0 <= dist_pct <= 0.015)  # Flag if near entry (1.5%)
-                }
-                
-                # Update cache immediately for this ticker
-                with SCAN_LOCK:
-                    SCAN_CACHE[ticker] = result
-                    
+            analyzer = ICTAnalyzer(ticker, timeframe="4h")
+
+            # Try to use batch data, fall back to individual fetch
+            if use_batch:
+                try:
+                    if len(WATCHLIST) == 1:
+                        ticker_df = batch_data.copy()
+                    else:
+                        ticker_df = batch_data[ticker].copy()
+                    ticker_df = ticker_df.dropna(how='all')
+
+                    if isinstance(ticker_df.columns, pd.MultiIndex):
+                        ticker_df.columns = ticker_df.columns.get_level_values(0)
+
+                    # Resample to 4H
+                    ticker_df = ticker_df.resample('4h').agg({
+                        'Open': 'first', 'High': 'max', 'Low': 'min',
+                        'Close': 'last', 'Volume': 'sum',
+                    }).dropna()
+
+                    if len(ticker_df) > 50:
+                        analyzer.set_data(ticker_df)
+                    else:
+                        analyzer.fetch_data(use_cache=True)
+                except Exception:
+                    analyzer.fetch_data(use_cache=True)
+            else:
+                analyzer.fetch_data(use_cache=True)
+
+            if analyzer.df is None or analyzer.df.empty or len(analyzer.df) < 50:
+                continue
+
+            # Run analysis (no chart HTML needed for scanner)
+            analyzer.detect_swing_points()
+            analyzer.detect_order_blocks()
+            analyzer.detect_equal_highs_lows()
+            analyzer.detect_fair_value_gaps()
+
+            plan = analyzer.calculate_trade_plan()
+            current_price = float(analyzer.df['Close'].iloc[-1])
+            entry_price = plan['entry']
+            dist_pct = (current_price - entry_price) / current_price
+
+            result = {
+                'symbol': ticker,
+                'price': float(current_price),
+                'entry': float(entry_price),
+                'dist': float(dist_pct * 100),
+                'setup': plan['type'],
+                'rr_ratio': plan.get('rr_ratio', 0),
+                'valid': plan.get('valid', False),
+                'timestamp': datetime.now().isoformat(),
+                'near_entry': bool(0 <= dist_pct <= 0.015),
+            }
+
+            with SCAN_LOCK:
+                SCAN_CACHE[ticker] = result
+
         except Exception as e:
-            print(f"  ⚠️ [Background] Error scanning {ticker}: {e}")
-            
-    # Final Status Update
+            logger.warning(f"Error scanning {ticker}: {e}")
+
     with SCAN_LOCK:
         SCAN_STATUS['last_scan'] = datetime.now().isoformat()
         SCAN_STATUS['is_scanning'] = False
         SCAN_STATUS['scan_count'] += 1
-    
-    # Force garbage collection to free memory
+
     gc.collect()
-    print(f"✅ [Background] Scan complete. Cache size: {len(SCAN_CACHE)} tickers.")
+    logger.info(f"Scan complete. Cache size: {len(SCAN_CACHE)} tickers.")
 
 
 def scanner_thread():
     """Background thread that runs scanner periodically."""
     global SCAN_STATUS
-    
-    # Initial scan on startup (with small delay to let Flask start)
+
     time.sleep(2)
     run_scanner()
-    
+
     while True:
         with SCAN_LOCK:
             SCAN_STATUS['next_scan'] = datetime.fromtimestamp(
                 time.time() + SCAN_INTERVAL
             ).isoformat()
-        
         time.sleep(SCAN_INTERVAL)
         run_scanner()
 
 
-# Start background scanner thread
+# Start background scanner
 scanner_bg_thread = threading.Thread(target=scanner_thread, daemon=True)
 scanner_bg_thread.start()
-print("🚀 Background scanner thread started")
+logger.info("Background scanner thread started")
 
 
 # ============ Routes ============
@@ -162,41 +214,41 @@ def index():
 def analyze():
     data = request.json
     symbol = data.get('symbol', 'NVDA')
-    
+
     try:
-        print(f"Web Request: Analyzing {symbol}...")
+        logger.info(f"Web Request: Analyzing {symbol}...")
         analyzer = analyze_stock(symbol, timeframe="4h")
-        
+
         if analyzer and not analyzer.df.empty:
             html_content = analyzer.generate_chart_html()
             return Response(html_content, mimetype='text/html')
         else:
             return "Error: No data found or analysis failed", 400
-            
+
     except Exception as e:
+        logger.error(f"Analysis error for {symbol}: {e}")
         return f"Server Error: {str(e)}", 500
 
 
 @app.route('/scan', methods=['GET'])
 def scan():
-    """Return cached scan results instantly."""
+    """Return cached scan results (near entry only)."""
     with SCAN_LOCK:
-        # Filter to only show tickers near entry
         near_entry = [v for v in SCAN_CACHE.values() if v.get('near_entry', False)]
         return jsonify({
             'results': near_entry,
             'total_scanned': len(SCAN_CACHE),
-            'last_scan': SCAN_STATUS['last_scan']
+            'last_scan': SCAN_STATUS['last_scan'],
         })
 
 
 @app.route('/scan/all', methods=['GET'])
 def scan_all():
-    """Return ALL cached results (not just near entry)."""
+    """Return ALL cached results."""
     with SCAN_LOCK:
         return jsonify({
             'results': list(SCAN_CACHE.values()),
-            'last_scan': SCAN_STATUS['last_scan']
+            'last_scan': SCAN_STATUS['last_scan'],
         })
 
 
@@ -210,7 +262,6 @@ def scan_status():
 @app.route('/scan/force', methods=['POST'])
 def scan_force():
     """Force immediate rescan in background."""
-    # Run in new thread to not block response
     threading.Thread(target=run_scanner, daemon=True).start()
     return jsonify({'message': 'Rescan triggered', 'status': 'running'})
 
@@ -225,107 +276,59 @@ def scan_clear():
 
 @app.route('/backtest', methods=['POST'])
 def backtest():
-    """
-    Generate before/after backtest visualization.
-    Request: {symbol, date, days_after}
-    Returns: HTML with side-by-side charts
-    """
+    """Generate before/after backtest visualization."""
     data = request.json
     symbol = data.get('symbol', 'NVDA')
-    backtest_date = data.get('date')  # e.g., "2024-10-15"
+    backtest_date = data.get('date')
     days_after = data.get('days_after', 20)
-    
+
     if not backtest_date:
         return jsonify({'error': 'date is required'}), 400
-    
+
     try:
-        from datetime import datetime, timedelta
-        
-        # Parse dates
+        from datetime import timedelta
+
         setup_date = datetime.strptime(backtest_date, '%Y-%m-%d')
         outcome_date = setup_date + timedelta(days=days_after)
         outcome_date_str = outcome_date.strftime('%Y-%m-%d')
-        
-        print(f"📊 Backtesting {symbol}: Setup={backtest_date}, Outcome={outcome_date_str}")
-        
-        # Generate "Before" chart (as of setup_date)
+
+        logger.info(f"Backtesting {symbol}: Setup={backtest_date}, Outcome={outcome_date_str}")
+
         analyzer_before = analyze_stock(symbol, timeframe="4h", end_date=backtest_date)
         if not analyzer_before or analyzer_before.df.empty:
             return jsonify({'error': 'No data for setup date'}), 400
         chart_before = analyzer_before.generate_chart_html()
-        
-        # Generate "After" chart (extended by days_after)
+
         analyzer_after = analyze_stock(symbol, timeframe="4h", end_date=outcome_date_str)
         if not analyzer_after or analyzer_after.df.empty:
             return jsonify({'error': 'No data for outcome date'}), 400
         chart_after = analyzer_after.generate_chart_html()
-        
-        # Get trade plan from "before" for comparison
+
         plan = analyzer_before.calculate_trade_plan()
-        outcome_price = analyzer_after.df['Close'].iloc[-1]
+        outcome_price = float(analyzer_after.df['Close'].iloc[-1])
         entry_price = plan['entry']
-        
-        # Calculate P&L
-        if outcome_price > entry_price:
-            pnl_pct = ((outcome_price - entry_price) / entry_price) * 100
-            pnl_class = "profit"
-        else:
-            pnl_pct = ((outcome_price - entry_price) / entry_price) * 100
-            pnl_class = "loss"
-        
-        # Generate combined HTML with side-by-side iframes
+
+        pnl_pct = ((outcome_price - entry_price) / entry_price) * 100
+        pnl_class = "profit" if pnl_pct >= 0 else "loss"
+
         combined_html = f'''
 <!DOCTYPE html>
 <html>
 <head>
     <title>Backtest: {symbol} - {backtest_date}</title>
     <style>
-        body {{
-            margin: 0;
-            padding: 20px;
-            background: #1a1a2e;
-            color: #fff;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        }}
-        .header {{
-            text-align: center;
-            margin-bottom: 20px;
-        }}
-        .header h1 {{
-            margin: 0;
-            font-size: 24px;
-        }}
-        .summary {{
-            display: flex;
-            justify-content: center;
-            gap: 40px;
-            margin: 15px 0;
-            font-size: 14px;
-        }}
+        body {{ margin: 0; padding: 20px; background: #1a1a2e; color: #fff;
+               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }}
+        .header {{ text-align: center; margin-bottom: 20px; }}
+        .header h1 {{ margin: 0; font-size: 24px; }}
+        .summary {{ display: flex; justify-content: center; gap: 40px; margin: 15px 0; font-size: 14px; }}
         .summary .profit {{ color: #26a69a; }}
         .summary .loss {{ color: #ef5350; }}
-        .container {{
-            display: flex;
-            gap: 20px;
-            height: calc(100vh - 150px);
-        }}
-        .panel {{
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }}
-        .panel h3 {{
-            margin: 0 0 10px 0;
-            padding: 10px;
-            background: #16213e;
-            border-radius: 8px 8px 0 0;
-            text-align: center;
-        }}
-        .panel iframe {{
-            flex: 1;
-            border: none;
-            border-radius: 0 0 8px 8px;
-        }}
+        .container {{ display: flex; gap: 20px; height: calc(100vh - 150px); }}
+        .panel {{ flex: 1; display: flex; flex-direction: column; }}
+        .panel h3 {{ margin: 0 0 10px 0; padding: 10px; background: #16213e;
+                     border-radius: 8px 8px 0 0; text-align: center; }}
+        .panel iframe {{ flex: 1; border: none; border-radius: 0 0 8px 8px; }}
         .before h3 {{ border-left: 4px solid #ff9800; }}
         .after h3 {{ border-left: 4px solid #26a69a; }}
     </style>
@@ -354,7 +357,7 @@ def backtest():
 </html>
 '''
         return Response(combined_html, mimetype='text/html')
-        
+
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -362,6 +365,5 @@ def backtest():
 
 
 if __name__ == '__main__':
-    import os
     port = int(os.environ.get('PORT', 5001))
     app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
