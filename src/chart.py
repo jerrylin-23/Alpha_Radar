@@ -258,7 +258,7 @@ def generate_chart_html(
                     ]);
 
                     // 2. Pinned Yellow "E" Badge at the absolute bottom of the chart
-                    chart.leftPriceScale().applyOptions({{
+                    chart.priceScale('left').applyOptions({{
                         scaleMargins: {{
                             top: 0.94, // Force series to the absolute bottom of the screen
                             bottom: 0.01,
