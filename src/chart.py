@@ -242,6 +242,17 @@ def generate_chart_html(
                 candlestickSeries.setData(data.candles);
 
                 const markers = [];
+                if (data.earnings_vwap && data.earnings_vwap.length > 0) {{
+                    const erTime = data.earnings_vwap[0].time;
+                    markers.push({{
+                        time: erTime,
+                        position: 'belowBar',
+                        color: '#b39ddb',
+                        shape: 'circle',
+                        text: 'E',
+                        size: 1.2
+                    }});
+                }}
                 const seriesRegistry = [];
 
                 const registerSeries = (id, title, price, color, seriesObj, originalWidth, isLevelLine = false) => {{
