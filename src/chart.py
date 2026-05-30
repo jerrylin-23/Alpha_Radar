@@ -244,14 +244,28 @@ def generate_chart_html(
                 const markers = [];
                 if (data.earnings_vwap && data.earnings_vwap.length > 0) {{
                     const erTime = data.earnings_vwap[0].time;
+                    
+                    // 1. Sleek TV-style yellow circular marker
                     markers.push({{
                         time: erTime,
                         position: 'belowBar',
-                        color: '#b39ddb',
+                        color: '#f59e0b', // TradingView yellow/amber earnings badge
                         shape: 'circle',
                         text: 'E',
                         size: 1.2
                     }});
+
+                    // 2. Vertical yellow highlight line running all the way down (via hidden left scale)
+                    const erLineSeries = chart.addHistogramSeries({{
+                        priceScaleId: 'left',
+                        color: 'rgba(245, 158, 11, 0.18)', // Semi-transparent yellow stripe
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                        base: 0,
+                    }});
+                    erLineSeries.setData([
+                        {{ time: erTime, value: 100 }}
+                    ]);
                 }}
                 const seriesRegistry = [];
 
