@@ -142,10 +142,14 @@ def run_scanner():
                     if isinstance(ticker_df.columns, pd.MultiIndex):
                         ticker_df.columns = ticker_df.columns.get_level_values(0)
 
-                    # Resample to 4H
-                    ticker_df = ticker_df.resample('4h').agg({
-                        'Open': 'first', 'High': 'max', 'Low': 'min',
-                        'Close': 'last', 'Volume': 'sum',
+                    # Resample to 4H safely
+                    resampler = ticker_df.resample('4h')
+                    ticker_df = pd.DataFrame({
+                        'Open': resampler['Open'].first(),
+                        'High': resampler['High'].max(),
+                        'Low': resampler['Low'].min(),
+                        'Close': resampler['Close'].last(),
+                        'Volume': resampler['Volume'].sum(),
                     }).dropna()
 
                     if len(ticker_df) > 50:

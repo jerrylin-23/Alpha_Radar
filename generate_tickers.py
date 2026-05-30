@@ -30,8 +30,10 @@ print("Fetching Nasdaq 100 constituents...")
 nasdaq_data = get_json("https://raw.githubusercontent.com/rreichel3/US-Stock-Symbols/main/nasdaq100/components.json")
 nasdaq = [x['symbol'] for x in nasdaq_data]
 
-# Combine (excluding IWM/Russell components)
-full_list = sorted(list(set(custom + sp500 + nasdaq)))
+# Combine and clean (excluding IWM/Russell components, replacing dots with hyphens, and removing XYZ)
+full_list = sorted(list(set(
+    [ticker.replace('.', '-') for ticker in (custom + sp500 + nasdaq) if ticker != "XYZ"]
+)))
 
 output_path = 'src/tickers.txt'
 with open(output_path, 'w') as f:

@@ -54,9 +54,13 @@ class ICTAnalyzer:
             self.df.columns = self.df.columns.get_level_values(0)
 
         if self.timeframe == "4h" and interval == "1h":
-            self.df = self.df.resample('4h').agg({
-                'Open': 'first', 'High': 'max', 'Low': 'min',
-                'Close': 'last', 'Volume': 'sum'
+            resampler = self.df.resample('4h')
+            self.df = pd.DataFrame({
+                'Open': resampler['Open'].first(),
+                'High': resampler['High'].max(),
+                'Low': resampler['Low'].min(),
+                'Close': resampler['Close'].last(),
+                'Volume': resampler['Volume'].sum()
             }).dropna()
 
         if use_cache and self.df is not None and not self.df.empty:

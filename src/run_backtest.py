@@ -55,10 +55,14 @@ full_df = yf.download(SYMBOL, period="2y", interval="1h", progress=False, thread
 if isinstance(full_df.columns, pd.MultiIndex):
     full_df.columns = full_df.columns.get_level_values(0)
 
-# Resample to 4H
-full_df = full_df.resample('4h').agg({
-    'Open': 'first', 'High': 'max', 'Low': 'min',
-    'Close': 'last', 'Volume': 'sum',
+# Resample to 4H safely
+resampler = full_df.resample('4h')
+full_df = pd.DataFrame({
+    'Open': resampler['Open'].first(),
+    'High': resampler['High'].max(),
+    'Low': resampler['Low'].min(),
+    'Close': resampler['Close'].last(),
+    'Volume': resampler['Volume'].sum(),
 }).dropna()
 
 print(f"✅ {len(full_df)} 4H candles loaded\n")
