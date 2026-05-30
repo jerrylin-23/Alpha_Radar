@@ -47,10 +47,24 @@ SCAN_INTERVAL = 900 if DEMO_MODE else 300  # 15 min demo, 5 min normal
 DEFAULT_WATCHLIST = ["SPY", "IWM", "QQQ", "DIA", "NVDA", "AAPL", "MSFT", "AMZN", "GOOGL"]
 
 DEMO_WATCHLIST = [
-    "SPY", "QQQ", "IWM", "DIA",
-    "NVDA", "AAPL", "MSFT", "AMZN", "GOOGL", "META",
-    "TSLA", "AMD", "NFLX", "CRM", "ORCL",
-    "JPM", "V", "MA", "BAC", "GS",
+    # --- Indices & ETFs ---
+    "SPY", "QQQ", "IWM", "DIA", "SMH", "XLF", "XLK", "XLE", "XLV", "XLI",
+    # --- Mega-Cap Tech ---
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "AVGO", "ORCL", "CSCO",
+    # --- Semiconductors & Software ---
+    "AMD", "QCOM", "INTC", "TXN", "AMAT", "MU", "LRCX", "ADI", "PANW", "PLTR",
+    "CRWD", "ADBE", "CRM", "NFLX", "NOW", "WDAY", "SNOW", "TEAM", "SQ", "SHOP",
+    # --- Financials & Fintech ---
+    "JPM", "BAC", "WFC", "C", "GS", "MS", "V", "MA", "AXP", "PYPL",
+    "COF", "BLK", "SCHW", "KKR", "BX", "HOOD", "COIN",
+    # --- Consumer, Retail & Entertainment ---
+    "WMT", "COST", "TGT", "HD", "LOW", "PG", "KO", "PEP", "MCD", "SBUX",
+    "NKE", "DIS", "CMG", "EL", "CL", "TJX", "LULU", "UBER", "ABNB", "MELI",
+    # --- Healthcare, Biotech & Pharma ---
+    "LLY", "JNJ", "UNH", "PFE", "ABBV", "MRK", "AMGN", "GILD", "BMY", "ISRG",
+    # --- Industrials, Defense, Energy & Materials ---
+    "CAT", "DE", "HON", "GE", "LMT", "BA", "RTX", "UPS", "FDX", "XOM",
+    "CVX", "COP", "SLB", "FCX", "NUE",
 ]
 
 
