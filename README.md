@@ -6,6 +6,9 @@ A Python-based algorithmic trading tool that detects **ICT (Inner Circle Trader)
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![Flask](https://img.shields.io/badge/Flask-Web%20UI-green.svg)
+![React](https://img.shields.io/badge/React-18-61DAFB.svg)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6.svg)
+![Vite](https://img.shields.io/badge/Vite-6-646CFF.svg)
 ![Postgres](https://img.shields.io/badge/PostgreSQL-optional-336791.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
@@ -108,6 +111,7 @@ This analyzer combines these concepts into a systematic approach:
 - **Automatic Trade Plans**: Generates Entry, Stop Loss, and 3 Take Profit levels
 
 ### 🌐 Web Interface
+- **React + TypeScript Frontend**: Modern SPA built with Vite, typed API client
 - **Real-time Market Scanner**: Monitors 500+ tickers from S&P 500 and Nasdaq 100
 - **Interactive Charts**: TradingView Lightweight Charts with 2 years of history
 - **Live Results**: Streaming updates as each ticker is scanned
@@ -148,14 +152,23 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Run Web Scanner
+### 2. Build Frontend
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+```
+The build output lands in `src/static/` and is served by Flask automatically.
+
+### 3. Run Web Scanner
 ```bash
 source venv/bin/activate
 python src/app.py
 ```
 Open **http://127.0.0.1:5001** in your browser.
 
-### 3. Run Backtest
+### 4. Run Backtest
 ```bash
 source venv/bin/activate
 python src/run_backtest.py NVDA   # or AAPL, GOOGL, SPY, etc.
@@ -188,13 +201,22 @@ Results saved to `src/samples/<symbol>_daily_<date>/`
 
 ```
 alpha-radar/
+├── frontend/              # React + TypeScript SPA (Vite)
+│   ├── src/
+│   │   ├── App.tsx         # Main application component
+│   │   ├── api.ts          # Typed Flask API client
+│   │   ├── index.css       # Design system & styles
+│   │   └── main.tsx        # Entry point
+│   ├── vite.config.ts      # Build config (outputs to src/static/)
+│   └── package.json
 ├── src/
 │   ├── app.py              # Flask web application
 │   ├── ict_analyzer.py     # Core ICT analysis logic
 │   ├── db.py               # PostgreSQL persistence (optional, auto-fallback)
+│   ├── static/             # Vite build output (served by Flask)
 │   ├── run_backtest.py     # Backtesting script
 │   ├── tickers.txt         # Watchlist (S&P 500 + Nasdaq 100)
-│   ├── templates/          # HTML templates
+│   ├── templates/          # Legacy HTML templates (fallback)
 │   └── samples/            # Backtest output (charts & summaries)
 ├── requirements.txt        # Python dependencies
 ├── generate_tickers.py     # Script to regenerate watchlist
@@ -231,6 +253,7 @@ In `src/app.py`, adjust the `near_entry` threshold (default: 1.5%):
 ## 📋 Requirements
 
 - Python 3.10+
+- Node.js 18+ (for frontend build only)
 - Flask
 - yfinance
 - pandas

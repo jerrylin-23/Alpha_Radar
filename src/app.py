@@ -23,7 +23,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+# Serve the built React (Vite) app from src/static at the web root.
+# Vite emits hashed assets under /assets/, so static_url_path="" maps them cleanly.
+app = Flask(__name__, static_folder="static", static_url_path="")
 
 # ============ Demo Mode ============
 DEMO_MODE = os.environ.get('DEMO_MODE', 'false').lower() == 'true'
@@ -223,6 +225,11 @@ logger.info("Background scanner thread started")
 
 @app.route('/')
 def index():
+    # Serve the built React app. Falls back to the legacy template if the
+    # frontend hasn't been built yet (e.g. fresh checkout without `npm run build`).
+    static_index = os.path.join(app.static_folder, 'index.html')
+    if os.path.exists(static_index):
+        return app.send_static_file('index.html')
     return render_template('index.html')
 
 
