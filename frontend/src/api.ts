@@ -25,10 +25,15 @@ export interface ScanStatusResponse {
   scan_count: number;
   demo_mode: boolean;
 }
-
 export async function fetchScan(): Promise<ScanResponse> {
   const res = await fetch("/scan");
   if (!res.ok) throw new Error(`Scan failed (${res.status})`);
+  return res.json();
+}
+
+export async function fetchScanAll(): Promise<ScanResponse> {
+  const res = await fetch("/scan/all");
+  if (!res.ok) throw new Error(`Scan all failed (${res.status})`);
   return res.json();
 }
 

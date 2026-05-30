@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { analyzeSymbol, fetchScan, fetchScanStatus, type ScanResult, type ScanStatusResponse } from "./api";
+import { analyzeSymbol, fetchScanAll, fetchScanStatus, type ScanResult, type ScanStatusResponse } from "./api";
 
 type View = "chart" | "scanner";
 
@@ -25,6 +25,7 @@ export default function App() {
   const [results, setResults] = useState<ScanResult[] | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanStatus, setScanStatus] = useState<ScanStatusResponse | null>(null);
+  const [filterNearEntry, setFilterNearEntry] = useState(true);
 
   const frameRef = useRef<HTMLIFrameElement>(null);
 
@@ -61,7 +62,7 @@ export default function App() {
     setScanning(true);
     setScanError(null);
     try {
-      const [data, status] = await Promise.all([fetchScan(), fetchScanStatus()]);
+      const [data, status] = await Promise.all([fetchScanAll(), fetchScanStatus()]);
       setResults(data.results);
       setScanStatus(status);
     } catch (err) {
@@ -168,7 +169,7 @@ export default function App() {
                 </span>
                 <span>Last scan: {lastScan}</span>
                 <span className="status-count">
-                  {results?.length ?? 0} near entry
+                  {results?.filter(r => r.near_entry).length ?? 0} near buy zone | {results?.length ?? 0} active setups
                 </span>
               </div>
             )}
@@ -190,70 +191,118 @@ export default function App() {
             )}
 
             {/* Results table */}
-            {!scanning && !scanError && results && results.length > 0 && (
-              <>
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Symbol</th>
-                      <th>Price</th>
-                      <th>Entry</th>
-                      <th>Distance</th>
-                      <th>Setup</th>
-                      <th>R:R</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {results.map((r) => {
-                      const badge = setupBadge(r.setup);
-                      const distNear = Math.abs(r.dist) <= 1.0;
-                      const rrGood =
-                        r.rr_ratio != null && r.rr_ratio >= 2;
-                      return (
-                        <tr key={r.symbol}>
-                          <td className="sym">{r.symbol}</td>
-                          <td className="price">${r.price.toFixed(2)}</td>
-                          <td className="entry">${r.entry.toFixed(2)}</td>
-                          <td
-                            className={`dist ${distNear ? "near" : "far"}`}
-                          >
-                            {r.dist.toFixed(2)}%
-                          </td>
-                          <td>
-                            <span className={badge.cls}>{badge.label}</span>
-                          </td>
-                          <td
-                            className={`rr ${rrGood ? "good" : ""}`}
-                          >
-                            {r.rr_ratio != null
-                              ? `${r.rr_ratio.toFixed(1)}:1`
-                              : "—"}
-                          </td>
-                          <td>
-                            <button
-                              className="btn-view"
-                              onClick={() => analyze(r.symbol)}
-                            >
-                              View →
-                            </button>
-                          </td>
+            {!scanning && !scanError && results && results.length > 0 && (() => {
+              const displayedResults = filterNearEntry ? results.filter(r => r.near_entry) : results;
+              return (
+                <>
+                  <div style={{ display: "flex", gap: "6px", marginBottom: "1.25rem", background: "rgba(30, 41, 59, 0.4)", padding: "4px", borderRadius: "8px", width: "fit-content", border: "1px solid var(--border)" }}>
+                    <button
+                      className={`tab-btn ${filterNearEntry ? "active" : ""}`}
+                      style={{
+                        background: filterNearEntry ? "var(--accent)" : "transparent",
+                        border: "none",
+                        color: filterNearEntry ? "#fff" : "var(--text-secondary)",
+                        padding: "6px 16px",
+                        borderRadius: "6px",
+                        fontSize: "0.8rem",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.2s"
+                      }}
+                      onClick={() => setFilterNearEntry(true)}
+                    >
+                      🎯 Near Entry ({results.filter(r => r.near_entry).length})
+                    </button>
+                    <button
+                      className={`tab-btn ${!filterNearEntry ? "active" : ""}`}
+                      style={{
+                        background: !filterNearEntry ? "var(--accent)" : "transparent",
+                        border: "none",
+                        color: !filterNearEntry ? "#fff" : "var(--text-secondary)",
+                        padding: "6px 16px",
+                        borderRadius: "6px",
+                        fontSize: "0.8rem",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        transition: "all 0.2s"
+                      }}
+                      onClick={() => setFilterNearEntry(false)}
+                    >
+                      🌐 All Setups ({results.length})
+                    </button>
+                  </div>
+
+                  {displayedResults.length > 0 ? (
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Symbol</th>
+                          <th>Price</th>
+                          <th>Entry</th>
+                          <th>Distance</th>
+                          <th>Setup</th>
+                          <th>R:R</th>
+                          <th></th>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                <div className="scan-meta">
-                  <span>
-                    Scans completed: {totalScanned}
-                  </span>
-                  <span>{results.length} results near entry</span>
-                </div>
-              </>
-            )}
+                      </thead>
+                      <tbody>
+                        {displayedResults.map((r) => {
+                          const badge = setupBadge(r.setup);
+                          const distNear = Math.abs(r.dist) <= 1.0;
+                          const rrGood =
+                            r.rr_ratio != null && r.rr_ratio >= 2;
+                          return (
+                            <tr key={r.symbol}>
+                              <td className="sym">{r.symbol}</td>
+                              <td className="price">${r.price.toFixed(2)}</td>
+                              <td className="entry">${r.entry.toFixed(2)}</td>
+                              <td
+                                className={`dist ${distNear ? "near" : "far"}`}
+                              >
+                                {r.dist.toFixed(2)}%
+                              </td>
+                              <td>
+                                <span className={badge.cls}>{badge.label}</span>
+                              </td>
+                              <td
+                                className={`rr ${rrGood ? "good" : ""}`}
+                              >
+                                {r.rr_ratio != null
+                                  ? `${r.rr_ratio.toFixed(1)}:1`
+                                  : "—"}
+                              </td>
+                              <td>
+                                <button
+                                  className="btn-view"
+                                  onClick={() => analyze(r.symbol)}
+                                >
+                                  View →
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <div className="empty">
+                      <div className="empty-icon">🔭</div>
+                      No setups are currently in the buy-the-dip zone. Select "All Setups" to view pending structures.
+                    </div>
+                  )}
+
+                  <div className="scan-meta">
+                    <span>
+                      Scans completed: {totalScanned}
+                    </span>
+                    <span>{displayedResults.length} setups displayed</span>
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Empty */}
-            {!scanning && !scanError && results && results.length === 0 && (
+            {!scanning && !scanError && (!results || results.length === 0) && (
               <div className="empty">
                 <div className="empty-icon">🔭</div>
                 No tickers within range right now. The scanner refreshes every
