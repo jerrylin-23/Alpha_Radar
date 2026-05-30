@@ -198,6 +198,7 @@ def generate_chart_html(
                 </div>
                 <div class="hud-legend" id="hud-legend"></div>
             </div>
+            <div id="er-vertical-line" style="position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed rgba(245, 158, 11, 0.45); pointer-events: none; z-index: 5; display: none;"></div>
         </div>
 
         <div id="sidebar">
@@ -285,6 +286,22 @@ def generate_chart_html(
                             size: 1.2
                         }}
                     ]);
+
+                    // 3. TV-style thin dashed vertical line going straight up (updates dynamically on scroll/zoom)
+                    const erLineDiv = document.getElementById('er-vertical-line');
+                    const updateErLinePosition = () => {{
+                        const erCoordinate = chart.timeScale().timeToCoordinate(erTime);
+                        if (erCoordinate === null) {{
+                            erLineDiv.style.display = 'none';
+                        }} else {{
+                            erLineDiv.style.display = 'block';
+                            erLineDiv.style.left = erCoordinate + 'px';
+                        }}
+                    }};
+
+                    chart.timeScale().subscribeVisibleLogicalRangeChange(updateErLinePosition);
+                    chart.timeScale().subscribeVisibleTimeRangeChange(updateErLinePosition);
+                    setTimeout(updateErLinePosition, 100);
                 }}
                 const seriesRegistry = [];
 
