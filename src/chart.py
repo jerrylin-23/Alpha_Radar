@@ -245,26 +245,45 @@ def generate_chart_html(
                 if (data.earnings_vwap && data.earnings_vwap.length > 0) {{
                     const erTime = data.earnings_vwap[0].time;
                     
-                    // 1. Sleek TV-style yellow circular marker
-                    markers.push({{
-                        time: erTime,
-                        position: 'belowBar',
-                        color: '#f59e0b', // TradingView yellow/amber earnings badge
-                        shape: 'circle',
-                        text: 'E',
-                        size: 1.2
-                    }});
-
-                    // 2. Vertical yellow highlight line running all the way down (via hidden left scale)
+                    // 1. Vertical yellow highlight stripe (via left scale)
                     const erLineSeries = chart.addHistogramSeries({{
                         priceScaleId: 'left',
-                        color: 'rgba(245, 158, 11, 0.18)', // Semi-transparent yellow stripe
+                        color: 'rgba(245, 158, 11, 0.15)', // Semi-transparent yellow stripe
                         priceLineVisible: false,
                         lastValueVisible: false,
                         base: 0,
                     }});
                     erLineSeries.setData([
                         {{ time: erTime, value: 100 }}
+                    ]);
+
+                    // 2. Pinned Yellow "E" Badge at the absolute bottom of the chart
+                    chart.leftPriceScale().applyOptions({{
+                        scaleMargins: {{
+                            top: 0.94, // Force series to the absolute bottom of the screen
+                            bottom: 0.01,
+                        }}
+                    }});
+
+                    const erMarkerSeries = chart.addLineSeries({{
+                        priceScaleId: 'left',
+                        color: 'transparent', // Invisible line
+                        priceLineVisible: false,
+                        lastValueVisible: false,
+                        crosshairMarkerVisible: false,
+                    }});
+                    erMarkerSeries.setData([
+                        {{ time: erTime, value: 0 }}
+                    ]);
+                    erMarkerSeries.setMarkers([
+                        {{
+                            time: erTime,
+                            position: 'inBar', // Places it directly on the value 0 line at the bottom
+                            color: '#f59e0b',  // TV yellow
+                            shape: 'circle',
+                            text: 'E',
+                            size: 1.2
+                        }}
                     ]);
                 }}
                 const seriesRegistry = [];
