@@ -67,7 +67,7 @@ def generate_chart_html(
         for f in relevant_fvgs[:max_fvgs]:
             midpoint = (f['top'] + f['bottom']) / 2
             color = '#ffeb3b' if f['type'] == 'bullish' else '#ff9800'
-            title = "BULL GAP" if f['type'] == 'bullish' else "BEAR GAP"
+            title = "FVG\u2191" if f['type'] == 'bullish' else "FVG\u2193"
             start_time = int(f['date'].timestamp())
             fvg_lines.append({
                 'price': midpoint, 'color': color, 'title': title,
@@ -80,11 +80,11 @@ def generate_chart_html(
     # --- Trade plan lines ---
     plan = trade_plan
     trade_lines = [
-        {'price': plan['entry'], 'color': '#4caf50', 'title': 'ENTRY', 'style': 2},
-        {'price': plan['sl'],    'color': '#ef5350', 'title': 'STOP',  'style': 0},
-        {'price': plan['tp1'],   'color': '#2196f3', 'title': 'TP1',   'style': 2},
-        {'price': plan['tp2'],   'color': '#2196f3', 'title': 'TP2',   'style': 2},
-        {'price': plan['tp3'],   'color': '#2196f3', 'title': 'TP3',   'style': 2},
+        {'price': plan['entry'], 'color': '#4caf50', 'title': 'ENTRY', 'style': 2, 'width': 2},
+        {'price': plan['sl'],    'color': '#ef5350', 'title': 'STOP',  'style': 0, 'width': 2},
+        {'price': plan['tp1'],   'color': '#2196f3', 'title': 'T1',    'style': 2, 'width': 1},
+        {'price': plan['tp2'],   'color': '#2196f3', 'title': 'T2',    'style': 2, 'width': 1},
+        {'price': plan['tp3'],   'color': '#2196f3', 'title': 'T3',    'style': 2, 'width': 1},
     ]
 
     # --- Trade plan sidebar HTML ---
@@ -222,7 +222,7 @@ def generate_chart_html(
                     data.trade_lines.forEach(line => {{
                         const isKey = line.title === 'ENTRY' || line.title === 'STOP';
                         const tradeSeries = chart.addLineSeries({{
-                            color: line.color, lineWidth: 2,
+                            color: line.color, lineWidth: line.width || 2,
                             lineStyle: line.style === 2 ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Solid,
                             priceLineVisible: isKey, lastValueVisible: isKey, title: line.title
                         }});
@@ -317,10 +317,12 @@ def _build_level_lines(df: pd.DataFrame, eq_levels: dict, current_price: float, 
 
     level_lines = []
     for lvl in final_pool[:max_levels]:
-        role = "Res" if lvl['price'] > current_price else "Sup"
+        # Short label: just the type abbreviation
+        short = lvl['type'].replace('Recent High', 'RH').replace('Recent Low', 'RL') \
+                           .replace('Swing High', 'SH').replace('Swing Low', 'SL')
         level_lines.append({
             'price': lvl['price'], 'color': lvl['color'],
-            'title': f"{lvl['type']} ({role})",
-            'lineWidth': 1, 'lineStyle': 2, 'axisLabelVisible': True,
+            'title': short,
+            'lineWidth': 1, 'lineStyle': 2,
         })
     return level_lines

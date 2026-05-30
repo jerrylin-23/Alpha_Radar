@@ -502,7 +502,7 @@ class ICTAnalyzer:
     # ------------------------------------------------------------------ #
     #  Chart HTML (delegates to chart.py)
     # ------------------------------------------------------------------ #
-    def generate_chart_html(self, show_fvgs=True, max_fvgs=2, max_levels=2) -> str:
+    def generate_chart_html(self, show_fvgs=True, max_fvgs=1, max_levels=2) -> str:
         plan = self.calculate_trade_plan()
         summary = self.generate_analysis_summary()
         return generate_chart_html(
