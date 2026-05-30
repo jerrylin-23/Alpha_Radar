@@ -198,7 +198,7 @@ def generate_chart_html(
                 </div>
                 <div class="hud-legend" id="hud-legend"></div>
             </div>
-            <div id="er-vertical-line" style="position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed rgba(245, 158, 11, 0.45); pointer-events: none; z-index: 5; display: none;"></div>
+            <div id="er-vertical-line" style="position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed rgba(255, 255, 255, 0.08); pointer-events: none; z-index: 1; display: none;"></div>
         </div>
 
         <div id="sidebar">
@@ -246,23 +246,11 @@ def generate_chart_html(
                 if (data.earnings_vwap && data.earnings_vwap.length > 0) {{
                     const erTime = data.earnings_vwap[0].time;
                     
-                    // 1. Vertical yellow highlight stripe (via left scale)
-                    const erLineSeries = chart.addHistogramSeries({{
-                        priceScaleId: 'left',
-                        color: 'rgba(245, 158, 11, 0.15)', // Semi-transparent yellow stripe
-                        priceLineVisible: false,
-                        lastValueVisible: false,
-                        base: 0,
-                    }});
-                    erLineSeries.setData([
-                        {{ time: erTime, value: 100 }}
-                    ]);
-
-                    // 2. Pinned Yellow "E" Badge at the absolute bottom of the chart
+                    // 1. Pinned Yellow "E" Badge at the absolute bottom of the chart
                     chart.priceScale('left').applyOptions({{
                         scaleMargins: {{
-                            top: 0.94, // Force series to the absolute bottom of the screen
-                            bottom: 0.01,
+                            top: 0.90, // Force series slightly up to sit beautifully inside bottom grid
+                            bottom: 0.04,
                         }}
                     }});
 
