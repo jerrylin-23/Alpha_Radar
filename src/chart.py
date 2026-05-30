@@ -137,12 +137,67 @@ def generate_chart_html(
             .stat-item {{ display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }}
             .bullish {{ color: #4caf50; }}
             .bearish {{ color: #ef5350; }}
-            .legend {{ position: absolute; top: 12px; left: 12px; z-index: 10; font-size: 24px; font-weight: bold; color: rgba(255, 255, 255, 0.7); }}
+            
+            /* Floating HUD styles */
+            .chart-hud {{
+                position: absolute;
+                top: 15px;
+                left: 15px;
+                z-index: 10;
+                pointer-events: none;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }}
+            .hud-header {{
+                display: flex;
+                align-items: baseline;
+                gap: 6px;
+            }}
+            .hud-symbol {{
+                font-size: 22px;
+                font-weight: 700;
+                color: #ffffff;
+                text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            }}
+            .hud-tf {{
+                font-size: 11px;
+                font-weight: 600;
+                color: #8f94a0;
+                background: rgba(255, 255, 255, 0.1);
+                padding: 1px 6px;
+                border-radius: 3px;
+            }}
+            .hud-legend {{
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+                max-width: 550px;
+            }}
+            .hud-badge {{
+                font-size: 11px;
+                font-weight: 500;
+                padding: 4px 8px;
+                border-radius: 4px;
+                backdrop-filter: blur(8px);
+                background: rgba(26, 26, 46, 0.75);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                display: flex;
+                align-items: center;
+                gap: 5px;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            }}
         </style>
     </head>
     <body>
         <div id="chart-container">
-            <div class="legend">{symbol} 4H</div>
+            <div class="chart-hud">
+                <div class="hud-header">
+                    <span class="hud-symbol">{symbol}</span>
+                    <span class="hud-tf">4H</span>
+                </div>
+                <div class="hud-legend" id="hud-legend"></div>
+            </div>
         </div>
 
         <div id="sidebar">
@@ -194,7 +249,7 @@ def generate_chart_html(
                             color: line.color, lineWidth: 2,
                             lineStyle: LightweightCharts.LineStyle.Solid,
                             priceLineVisible: false, lastValueVisible: false,
-                            title: line.title, crosshairMarkerVisible: false
+                            crosshairMarkerVisible: false
                         }});
                         const lineData = [];
                         data.candles.forEach(c => {{
@@ -211,20 +266,26 @@ def generate_chart_html(
                         const levelSeries = chart.addLineSeries({{
                             color: line.color, lineWidth: line.lineWidth || 1,
                             lineStyle: line.lineStyle || LightweightCharts.LineStyle.Dashed,
-                            priceLineVisible: false, lastValueVisible: false, title: line.title
+                            priceLineVisible: false, lastValueVisible: false,
+                            crosshairMarkerVisible: false
                         }});
-                        const lineData = data.candles.map(c => ({{ time: c.time, value: line.price }}));
-                        levelSeries.setData(lineData);
+                        const lineData = [];
+                        data.candles.forEach(c => {{
+                            if (c.time >= line.start_time) {{
+                                lineData.push({{ time: c.time, value: line.price }});
+                            }}
+                        }});
+                        if (lineData.length > 0) levelSeries.setData(lineData);
                     }});
                 }}
 
                 if (data.trade_lines) {{
                     data.trade_lines.forEach(line => {{
-                        const isKey = line.title === 'ENTRY' || line.title === 'STOP';
                         const tradeSeries = chart.addLineSeries({{
                             color: line.color, lineWidth: line.width || 2,
                             lineStyle: line.style === 2 ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Solid,
-                            priceLineVisible: isKey, lastValueVisible: isKey, title: line.title
+                            priceLineVisible: false, lastValueVisible: false,
+                            crosshairMarkerVisible: false
                         }});
                         const recentCandles = data.candles.slice(-100);
                         const lineData = recentCandles.map(c => ({{ time: c.time, value: line.price }}));
@@ -236,9 +297,52 @@ def generate_chart_html(
                     const vwapSeries = chart.addLineSeries({{
                         color: '#b39ddb', lineWidth: 2,
                         lineStyle: LightweightCharts.LineStyle.Solid,
-                        title: 'Earnings VWAP', priceLineVisible: false
+                        priceLineVisible: false, lastValueVisible: false,
+                        crosshairMarkerVisible: false
                     }});
                     vwapSeries.setData(data.earnings_vwap);
+                }}
+
+                // Build dynamic glassmorphism HUD legend
+                const hudLegend = document.getElementById('hud-legend');
+                const addBadge = (label, value, color) => {{
+                    const badge = document.createElement('div');
+                    badge.className = 'hud-badge';
+                    badge.style.borderLeft = '3px solid ' + color;
+                    
+                    const dot = document.createElement('span');
+                    dot.style.width = '6px';
+                    dot.style.height = '6px';
+                    dot.style.borderRadius = '50%';
+                    dot.style.backgroundColor = color;
+                    
+                    const text = document.createElement('span');
+                    text.style.color = '#e1e4ea';
+                    text.innerHTML = '<strong>' + label + '</strong>: $' + Number(value).toFixed(2);
+                    
+                    badge.appendChild(dot);
+                    badge.appendChild(text);
+                    hudLegend.appendChild(badge);
+                }};
+
+                if (data.trade_lines) {{
+                    data.trade_lines.forEach(line => {{
+                        addBadge(line.title, line.price, line.color);
+                    }});
+                }}
+                if (data.fvg_lines) {{
+                    data.fvg_lines.forEach(line => {{
+                        addBadge(line.title, line.price, line.color);
+                    }});
+                }}
+                if (data.level_lines) {{
+                    data.level_lines.forEach(line => {{
+                        addBadge(line.title, line.price, line.color);
+                    }});
+                }}
+                if (data.earnings_vwap && data.earnings_vwap.length > 0) {{
+                    const lastVwap = data.earnings_vwap[data.earnings_vwap.length - 1].value;
+                    addBadge('ER VWAP', lastVwap, '#b39ddb');
                 }}
 
                 const lastTime = data.candles[data.candles.length - 1].time;
@@ -265,9 +369,9 @@ def _build_level_lines(df: pd.DataFrame, eq_levels: dict, current_price: float, 
     all_levels = []
     if eq_levels:
         for eqh in eq_levels.get('highs', []):
-            all_levels.append({'price': eqh['price'], 'type': 'EQH', 'color': '#ef5350'})
+            all_levels.append({'price': eqh['price'], 'type': 'EQH', 'color': '#ef5350', 'indices': eqh.get('indices', [])})
         for eql in eq_levels.get('lows', []):
-            all_levels.append({'price': eql['price'], 'type': 'EQL', 'color': '#26a69a'})
+            all_levels.append({'price': eql['price'], 'type': 'EQL', 'color': '#26a69a', 'indices': eql.get('indices', [])})
 
     valid_eqh = sorted([l for l in all_levels if l['type'] == 'EQH' and l['price'] > current_price],
                         key=lambda x: abs(x['price'] - current_price))
@@ -284,12 +388,12 @@ def _build_level_lines(df: pd.DataFrame, eq_levels: dict, current_price: float, 
         highs_above = swing_highs[swing_highs['High'] > current_price]
         if not highs_above.empty:
             nearest = highs_above.iloc[(highs_above['High'] - current_price).abs().argsort()[:1]]
-            forced_levels.append({'price': float(nearest['High'].iloc[0]), 'type': 'Swing High', 'color': '#ef5350'})
+            forced_levels.append({'price': float(nearest['High'].iloc[0]), 'type': 'Swing High', 'color': '#ef5350', 'indices': [nearest.index[0]]})
         else:
             recent = df.iloc[-300:]
             rh = recent[recent['High'] > current_price]
             if not rh.empty:
-                forced_levels.append({'price': float(rh['High'].max()), 'type': 'Recent High', 'color': '#ef5350'})
+                forced_levels.append({'price': float(rh['High'].max()), 'type': 'Recent High', 'color': '#ef5350', 'indices': [rh['High'].idxmax()]})
 
     # Ensure at least one support
     if valid_eql:
@@ -299,12 +403,12 @@ def _build_level_lines(df: pd.DataFrame, eq_levels: dict, current_price: float, 
         lows_below = swing_lows[swing_lows['Low'] < current_price]
         if not lows_below.empty:
             nearest = lows_below.iloc[(current_price - lows_below['Low']).abs().argsort()[:1]]
-            forced_levels.append({'price': float(nearest['Low'].iloc[0]), 'type': 'Swing Low', 'color': '#26a69a'})
+            forced_levels.append({'price': float(nearest['Low'].iloc[0]), 'type': 'Swing Low', 'color': '#26a69a', 'indices': [nearest.index[0]]})
         else:
             recent = df.iloc[-300:]
             rl = recent[recent['Low'] < current_price]
             if not rl.empty:
-                forced_levels.append({'price': float(rl['Low'].min()), 'type': 'Recent Low', 'color': '#26a69a'})
+                forced_levels.append({'price': float(rl['Low'].min()), 'type': 'Recent Low', 'color': '#26a69a', 'indices': [rl['Low'].idxmin()]})
 
     # Deduplicate and pick top N by distance
     seen_prices = set()
@@ -320,9 +424,18 @@ def _build_level_lines(df: pd.DataFrame, eq_levels: dict, current_price: float, 
         # Short label: just the type abbreviation
         short = lvl['type'].replace('Recent High', 'RH').replace('Recent Low', 'RL') \
                            .replace('Swing High', 'SH').replace('Swing Low', 'SL')
+        
+        indices = lvl.get('indices', [])
+        valid_timestamps = [int(x.timestamp()) for x in indices if hasattr(x, 'timestamp')]
+        if valid_timestamps:
+            start_time = min(valid_timestamps)
+        else:
+            start_time = int(df.index[0].timestamp())
+
         level_lines.append({
             'price': lvl['price'], 'color': lvl['color'],
             'title': short,
             'lineWidth': 1, 'lineStyle': 2,
+            'start_time': start_time,
         })
     return level_lines
