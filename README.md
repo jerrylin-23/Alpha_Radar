@@ -1,9 +1,12 @@
-# ICT Buy the Dip Analyzer
+# Alpha Radar
 
-A Python-based algorithmic trading tool that detects **ICT (Inner Circle Trader) concepts** to generate actionable trade plans. This analyzer identifies liquidity pools, imbalances, and market structure to find high-probability long entries.
+> Formerly *ICT Buy the Dip Analyzer*
+
+A Python-based algorithmic trading tool that detects **ICT (Inner Circle Trader) concepts** to generate actionable trade plans. Alpha Radar identifies liquidity pools, imbalances, and market structure to find high-probability long entries, and serves them through a live web scanner.
 
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![Flask](https://img.shields.io/badge/Flask-Web%20UI-green.svg)
+![Postgres](https://img.shields.io/badge/PostgreSQL-optional-336791.svg)
 ![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
 ---
@@ -117,13 +120,13 @@ This analyzer combines these concepts into a systematic approach:
 
 ---
 
-## 🌐 Live Demo (Render)
+## 🌐 Live Demo (Heroku)
 
 🔗 **Live Web Scanner**:  
-https://ict-buy-the-dip.onrender.com/
+https://alpha-radar-b725ddaf6ce0.herokuapp.com/
 
-> ⚠️ **Render Performance Disclaimer**  
-> This application is hosted on Render's **free tier** (Demo Mode).  
+> ⚠️ **Free-tier Performance Disclaimer**  
+> This application is hosted on Heroku's free dyno (Demo Mode).  
 > - Initial load may take **30–60 seconds** due to cold starts  
 > - Scanner limited to **20 popular tickers** with **15-minute intervals**  
 > - For full 500+ ticker scanning, run locally  
@@ -184,10 +187,11 @@ Results saved to `src/samples/<symbol>_daily_<date>/`
 ## 📁 Project Structure
 
 ```
-ICT/
+alpha-radar/
 ├── src/
 │   ├── app.py              # Flask web application
 │   ├── ict_analyzer.py     # Core ICT analysis logic
+│   ├── db.py               # PostgreSQL persistence (optional, auto-fallback)
 │   ├── run_backtest.py     # Backtesting script
 │   ├── tickers.txt         # Watchlist (S&P 500 + Nasdaq 100)
 │   ├── templates/          # HTML templates
@@ -214,6 +218,7 @@ TSLA
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DEMO_MODE` | `false` | Set to `true` for limited scanning (20 tickers, 15-min intervals) |
+| `DATABASE_URL` | _(unset)_ | PostgreSQL connection string. If set, scan results persist to Postgres; otherwise the app falls back to an in-memory cache automatically. |
 
 ### Scanner Sensitivity
 In `src/app.py`, adjust the `near_entry` threshold (default: 1.5%):

@@ -1,8 +1,18 @@
+# Python
 venv/
 __pycache__/
 *.pyc
-.DS_Store
-snapshots/
-.gemini/
-*.json
+*.pyo
+
+# Caches
 .cache/
+src/.cache/
+
+# OS
+.DS_Store
+
+# Local-only snapshots (not needed for deploy)
+snapshots/
+
+# Environment
+.env

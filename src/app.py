@@ -5,6 +5,7 @@ Background scanner with batch yfinance download and disk caching.
 
 from flask import Flask, render_template, request, Response, jsonify
 from ict_analyzer import ICTAnalyzer, analyze_stock
+import db
 import yfinance as yf
 import pandas as pd
 import threading
@@ -176,6 +177,11 @@ def run_scanner():
         SCAN_STATUS['last_scan'] = datetime.now().isoformat()
         SCAN_STATUS['is_scanning'] = False
         SCAN_STATUS['scan_count'] += 1
+        snapshot = list(SCAN_CACHE.values())
+
+    # Persist results to Postgres if configured (durable across dyno restarts).
+    # No-op when DATABASE_URL is unset.
+    db.upsert_results(snapshot)
 
     gc.collect()
     logger.info(f"Scan complete. Cache size: {len(SCAN_CACHE)} tickers.")
@@ -196,6 +202,16 @@ def scanner_thread():
         time.sleep(SCAN_INTERVAL)
         run_scanner()
 
+
+# Initialize optional Postgres persistence and hydrate the cache from the last
+# run so the scanner returns data immediately after a restart (before first scan).
+if db.init_db():
+    persisted = db.fetch_results()
+    if persisted:
+        with SCAN_LOCK:
+            for r in persisted:
+                SCAN_CACHE[r['symbol']] = r
+        logger.info(f"Hydrated {len(persisted)} scan results from Postgres.")
 
 # Start background scanner
 scanner_bg_thread = threading.Thread(target=scanner_thread, daemon=True)
