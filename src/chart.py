@@ -242,9 +242,23 @@ def generate_chart_html(
                 candlestickSeries.setData(data.candles);
 
                 const markers = [];
+                const seriesRegistry = [];
+
+                const registerSeries = (id, title, price, color, seriesObj, originalWidth, isLevelLine = false) => {{
+                    seriesRegistry.push({{
+                        id: id,
+                        title: title,
+                        price: price,
+                        color: color,
+                        series: seriesObj,
+                        originalWidth: originalWidth,
+                        isLevelLine: isLevelLine,
+                        badgeElement: null
+                    }});
+                }};
 
                 if (data.fvg_lines) {{
-                    data.fvg_lines.forEach(line => {{
+                    data.fvg_lines.forEach((line, idx) => {{
                         const fvgSeries = chart.addLineSeries({{
                             color: line.color, lineWidth: 2,
                             lineStyle: LightweightCharts.LineStyle.Solid,
@@ -256,13 +270,14 @@ def generate_chart_html(
                             if (c.time >= line.start_time) {{ lineData.push({{ time: c.time, value: line.price }}); }}
                         }});
                         if (lineData.length > 0) fvgSeries.setData(lineData);
+                        registerSeries('fvg_' + idx, line.title, line.price, line.color, fvgSeries, 2);
                     }});
                 }}
 
                 candlestickSeries.setMarkers(markers);
 
                 if (data.level_lines) {{
-                    data.level_lines.forEach(line => {{
+                    data.level_lines.forEach((line, idx) => {{
                         const levelSeries = chart.addLineSeries({{
                             color: line.color, lineWidth: line.lineWidth || 1,
                             lineStyle: line.lineStyle || LightweightCharts.LineStyle.Dashed,
@@ -276,11 +291,12 @@ def generate_chart_html(
                             }}
                         }});
                         if (lineData.length > 0) levelSeries.setData(lineData);
+                        registerSeries('level_' + idx, line.title, line.price, line.color, levelSeries, line.lineWidth || 1, true);
                     }});
                 }}
 
                 if (data.trade_lines) {{
-                    data.trade_lines.forEach(line => {{
+                    data.trade_lines.forEach((line, idx) => {{
                         const tradeSeries = chart.addLineSeries({{
                             color: line.color, lineWidth: line.width || 2,
                             lineStyle: line.style === 2 ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Solid,
@@ -290,6 +306,7 @@ def generate_chart_html(
                         const recentCandles = data.candles.slice(-100);
                         const lineData = recentCandles.map(c => ({{ time: c.time, value: line.price }}));
                         tradeSeries.setData(lineData);
+                        registerSeries('trade_' + idx, line.title, line.price, line.color, tradeSeries, line.width || 2);
                     }});
                 }}
 
@@ -301,14 +318,125 @@ def generate_chart_html(
                         crosshairMarkerVisible: false
                     }});
                     vwapSeries.setData(data.earnings_vwap);
+                    const lastVwap = data.earnings_vwap[data.earnings_vwap.length - 1].value;
+                    registerSeries('vwap', 'ER VWAP', lastVwap, '#b39ddb', vwapSeries, 2);
                 }}
+
+                // Highlights State Management
+                let activeHighlightId = null;
+                let activeHoverId = null;
+
+                const toggleHighlight = (id) => {{
+                    if (activeHighlightId === id) {{
+                        clearHighlights();
+                    }} else {{
+                        highlightSeries(id);
+                    }}
+                }};
+
+                const highlightSeries = (id) => {{
+                    activeHighlightId = id;
+                    activeHoverId = null;
+                    
+                    seriesRegistry.forEach(item => {{
+                        const isTarget = item.id === id;
+                        
+                        item.series.applyOptions({{
+                            lineWidth: isTarget ? (item.originalWidth + 2) : 1,
+                            lineStyle: isTarget ? LightweightCharts.LineStyle.Solid : LightweightCharts.LineStyle.Dashed
+                        }});
+
+                        if (item.badgeElement) {{
+                            if (isTarget) {{
+                                item.badgeElement.style.background = 'rgba(255, 255, 255, 0.2)';
+                                item.badgeElement.style.borderColor = item.color;
+                                item.badgeElement.style.boxShadow = '0 0 10px ' + item.color + '40';
+                                item.badgeElement.style.transform = 'scale(1.05)';
+                                item.badgeElement.style.opacity = '1';
+                            }} else {{
+                                item.badgeElement.style.background = 'rgba(26, 26, 46, 0.3)';
+                                item.badgeElement.style.opacity = '0.3';
+                                item.badgeElement.style.transform = 'scale(0.95)';
+                                item.badgeElement.style.borderColor = 'rgba(255, 255, 255, 0.04)';
+                                item.badgeElement.style.boxShadow = 'none';
+                            }}
+                        }}
+                    }});
+                }};
+
+                const clearHighlights = () => {{
+                    activeHighlightId = null;
+                    activeHoverId = null;
+                    
+                    seriesRegistry.forEach(item => {{
+                        item.series.applyOptions({{
+                            lineWidth: item.originalWidth,
+                            lineStyle: item.isLevelLine || (item.id.startsWith('trade_') && item.title !== 'ENTRY' && item.title !== 'STOP')
+                                ? LightweightCharts.LineStyle.Dashed
+                                : LightweightCharts.LineStyle.Solid
+                        }});
+
+                        if (item.badgeElement) {{
+                            item.badgeElement.style.background = 'rgba(26, 26, 46, 0.75)';
+                            item.badgeElement.style.opacity = '1';
+                            item.badgeElement.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                            item.badgeElement.style.boxShadow = '0 4px 6px rgba(0,0,0,0.2)';
+                            item.badgeElement.style.transform = 'none';
+                        }}
+                    }});
+                }};
+
+                const hoverHighlightSeries = (id) => {{
+                    if (activeHighlightId !== null) return;
+                    activeHoverId = id;
+                    
+                    seriesRegistry.forEach(item => {{
+                        const isTarget = item.id === id;
+                        item.series.applyOptions({{
+                            lineWidth: isTarget ? (item.originalWidth + 2) : 1
+                        }});
+                        if (item.badgeElement) {{
+                            if (isTarget) {{
+                                item.badgeElement.style.background = 'rgba(255, 255, 255, 0.25)';
+                                item.badgeElement.style.borderColor = item.color;
+                                item.badgeElement.style.boxShadow = '0 0 10px ' + item.color + '40';
+                                item.badgeElement.style.transform = 'scale(1.05)';
+                                item.badgeElement.style.opacity = '1';
+                            }} else {{
+                                item.badgeElement.style.opacity = '0.4';
+                                item.badgeElement.style.transform = 'scale(0.95)';
+                            }}
+                        }}
+                    }});
+                }};
+
+                const clearHoverHighlight = () => {{
+                    activeHoverId = null;
+                    if (activeHighlightId !== null) return;
+                    
+                    seriesRegistry.forEach(item => {{
+                        item.series.applyOptions({{
+                            lineWidth: item.originalWidth
+                        }});
+                        if (item.badgeElement) {{
+                            item.badgeElement.style.background = 'rgba(26, 26, 46, 0.75)';
+                            item.badgeElement.style.opacity = '1';
+                            item.badgeElement.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                            item.badgeElement.style.boxShadow = '0 4px 6px rgba(0,0,0,0.2)';
+                            item.badgeElement.style.transform = 'none';
+                        }}
+                    }});
+                }};
 
                 // Build dynamic glassmorphism HUD legend
                 const hudLegend = document.getElementById('hud-legend');
-                const addBadge = (label, value, color) => {{
+                const addBadge = (id, label, value, color) => {{
                     const badge = document.createElement('div');
                     badge.className = 'hud-badge';
                     badge.style.borderLeft = '3px solid ' + color;
+                    badge.style.cursor = 'pointer';
+                    badge.style.transition = 'all 0.2s ease';
+                    badge.style.pointerEvents = 'auto';
                     
                     const dot = document.createElement('span');
                     dot.style.width = '6px';
@@ -323,27 +451,110 @@ def generate_chart_html(
                     badge.appendChild(dot);
                     badge.appendChild(text);
                     hudLegend.appendChild(badge);
+
+                    const registryItem = seriesRegistry.find(item => item.id === id);
+                    if (registryItem) {{
+                        registryItem.badgeElement = badge;
+                    }}
+
+                    badge.addEventListener('click', (e) => {{
+                        e.stopPropagation();
+                        toggleHighlight(id);
+                    }});
+
+                    badge.addEventListener('mouseenter', () => {{
+                        badge.style.background = 'rgba(255, 255, 255, 0.15)';
+                        badge.style.transform = 'translateY(-1px)';
+                    }});
+                    badge.addEventListener('mouseleave', () => {{
+                        if (activeHighlightId !== id) {{
+                            badge.style.background = 'rgba(26, 26, 46, 0.75)';
+                            badge.style.transform = 'none';
+                        }}
+                    }});
                 }};
 
                 if (data.trade_lines) {{
-                    data.trade_lines.forEach(line => {{
-                        addBadge(line.title, line.price, line.color);
+                    data.trade_lines.forEach((line, idx) => {{
+                        addBadge('trade_' + idx, line.title, line.price, line.color);
                     }});
                 }}
                 if (data.fvg_lines) {{
-                    data.fvg_lines.forEach(line => {{
-                        addBadge(line.title, line.price, line.color);
+                    data.fvg_lines.forEach((line, idx) => {{
+                        addBadge('fvg_' + idx, line.title, line.price, line.color);
                     }});
                 }}
                 if (data.level_lines) {{
-                    data.level_lines.forEach(line => {{
-                        addBadge(line.title, line.price, line.color);
+                    data.level_lines.forEach((line, idx) => {{
+                        addBadge('level_' + idx, line.title, line.price, line.color);
                     }});
                 }}
                 if (data.earnings_vwap && data.earnings_vwap.length > 0) {{
                     const lastVwap = data.earnings_vwap[data.earnings_vwap.length - 1].value;
-                    addBadge('ER VWAP', lastVwap, '#b39ddb');
+                    addBadge('vwap', 'ER VWAP', lastVwap, '#b39ddb');
                 }}
+
+                // Crosshair interaction for Hover-Highlighting lines
+                chart.subscribeCrosshairMove(param => {{
+                    if (activeHighlightId !== null) return;
+                    
+                    if (!param || !param.time || !param.point) {{
+                        if (activeHoverId !== null) {{
+                            clearHoverHighlight();
+                        }}
+                        return;
+                    }}
+
+                    const price = candlestickSeries.coordinateToPrice(param.point.y);
+                    if (price === null) return;
+
+                    let closestItem = null;
+                    let minDistance = Infinity;
+                    
+                    seriesRegistry.forEach(item => {{
+                        const dist = Math.abs(item.price - price) / item.price;
+                        if (dist < minDistance) {{
+                            minDistance = dist;
+                            closestItem = item;
+                        }}
+                    }});
+
+                    // 0.2% tolerance for hovering
+                    if (minDistance < 0.002) {{
+                        if (activeHoverId !== closestItem.id) {{
+                            hoverHighlightSeries(closestItem.id);
+                        }}
+                    }} else {{
+                        if (activeHoverId !== null) {{
+                            clearHoverHighlight();
+                        }}
+                    }}
+                }});
+
+                // Click interaction for Click-Highlighting lines
+                chart.subscribeClick(param => {{
+                    if (!param || !param.point) return;
+                    const price = candlestickSeries.coordinateToPrice(param.point.y);
+                    if (price === null) return;
+
+                    let closestItem = null;
+                    let minDistance = Infinity;
+                    
+                    seriesRegistry.forEach(item => {{
+                        const dist = Math.abs(item.price - price) / item.price;
+                        if (dist < minDistance) {{
+                            minDistance = dist;
+                            closestItem = item;
+                        }}
+                    }});
+
+                    // 0.25% tolerance for clicking
+                    if (minDistance < 0.0025) {{
+                        toggleHighlight(closestItem.id);
+                    }} else {{
+                        clearHighlights();
+                    }}
+                }});
 
                 const lastTime = data.candles[data.candles.length - 1].time;
                 const startTime = data.candles[Math.max(0, data.candles.length - 100)].time;
