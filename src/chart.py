@@ -193,8 +193,8 @@ def generate_chart_html(
                         const fvgSeries = chart.addLineSeries({{
                             color: line.color, lineWidth: 2,
                             lineStyle: LightweightCharts.LineStyle.Solid,
-                            priceLineVisible: false, lastValueVisible: true,
-                            title: line.title, crosshairMarkerVisible: true
+                            priceLineVisible: false, lastValueVisible: false,
+                            title: line.title, crosshairMarkerVisible: false
                         }});
                         const lineData = [];
                         data.candles.forEach(c => {{
@@ -211,7 +211,7 @@ def generate_chart_html(
                         const levelSeries = chart.addLineSeries({{
                             color: line.color, lineWidth: line.lineWidth || 1,
                             lineStyle: line.lineStyle || LightweightCharts.LineStyle.Dashed,
-                            priceLineVisible: true, lastValueVisible: true, title: line.title
+                            priceLineVisible: false, lastValueVisible: false, title: line.title
                         }});
                         const lineData = data.candles.map(c => ({{ time: c.time, value: line.price }}));
                         levelSeries.setData(lineData);
@@ -220,10 +220,11 @@ def generate_chart_html(
 
                 if (data.trade_lines) {{
                     data.trade_lines.forEach(line => {{
+                        const isKey = line.title === 'ENTRY' || line.title === 'STOP';
                         const tradeSeries = chart.addLineSeries({{
                             color: line.color, lineWidth: 2,
                             lineStyle: line.style === 2 ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Solid,
-                            priceLineVisible: true, lastValueVisible: true, title: line.title
+                            priceLineVisible: isKey, lastValueVisible: isKey, title: line.title
                         }});
                         const recentCandles = data.candles.slice(-100);
                         const lineData = recentCandles.map(c => ({{ time: c.time, value: line.price }}));
