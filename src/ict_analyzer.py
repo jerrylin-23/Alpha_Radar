@@ -367,46 +367,57 @@ class ICTAnalyzer:
         current_price = float(self.df['Close'].iloc[-1])
         summary = []
 
+        def add_level(label: str, price: float, detail: str, tone: str) -> None:
+            summary.append(
+                f'<div class="market-level {tone}">'
+                f'<span class="market-level-label">{label}</span>'
+                f'<span class="market-level-value">${price:.2f}'
+                f'<small>{detail}</small></span>'
+                f'</div>'
+            )
+
         # Resistance
         resistances = [l for l in self.eq_levels.get('highs', []) if l['price'] > current_price]
         if resistances:
             closest_r = min(resistances, key=lambda x: x['price'])
-            summary.append(f"🔴 RESISTANCE (EQH) @ ${closest_r['price']:.2f}")
+            add_level('Resistance', closest_r['price'], 'Equal high', 'resistance')
         else:
             recent_highs = self.df[self.df.get('swing_high', False) == True].tail(5)
             highs_above = recent_highs[recent_highs['High'] > current_price]
             if not highs_above.empty:
-                summary.append(f"🔴 RESISTANCE (Swing) @ ${highs_above.iloc[-1]['High']:.2f}")
+                add_level('Resistance', highs_above.iloc[-1]['High'], 'Swing high', 'resistance')
 
         # Bear gaps above
         bear_fvgs = [f for f in self.fvgs if f['type'] == 'bearish' and not f['filled'] and f['bottom'] > current_price]
         if bear_fvgs:
             closest = min(bear_fvgs, key=lambda x: x['bottom'])
-            summary.append(f"⚠️ BEAR GAP above @ ${(closest['top'] + closest['bottom']) / 2:.2f}")
+            add_level('Overhead gap', (closest['top'] + closest['bottom']) / 2, 'Unfilled bearish FVG', 'warning')
 
         # Bull gaps below
         bull_fvgs = [f for f in self.fvgs if f['type'] == 'bullish' and not f['filled'] and f['top'] < current_price]
         if bull_fvgs:
             closest = max(bull_fvgs, key=lambda x: x['top'])
-            summary.append(f"✅ BULL GAP below @ ${(closest['top'] + closest['bottom']) / 2:.2f}")
+            add_level('Demand gap', (closest['top'] + closest['bottom']) / 2, 'Unfilled bullish FVG', 'support')
 
         # Support
         supports = [l for l in self.eq_levels.get('lows', []) if l['price'] < current_price]
         if supports:
             closest_s = max(supports, key=lambda x: x['price'])
-            summary.append(f"🟢 SUPPORT (EQL) @ ${closest_s['price']:.2f}")
+            add_level('Support', closest_s['price'], 'Equal low', 'support')
         else:
             recent_lows = self.df[self.df.get('swing_low', False) == True].tail(5)
             lows_below = recent_lows[recent_lows['Low'] < current_price]
             if not lows_below.empty:
-                summary.append(f"🟢 SUPPORT (Swing) @ ${lows_below.iloc[-1]['Low']:.2f}")
+                add_level('Support', lows_below.iloc[-1]['Low'], 'Swing low', 'support')
 
         # Earnings VWAP
         if self.earnings_vwap_current is not None:
             er_date = self.earnings_vwap_date.strftime('%m/%d') if self.earnings_vwap_date else ''
-            summary.append(f"📊 ER VWAP @ ${self.earnings_vwap_current:.2f} ({er_date})")
+            add_level('Earnings VWAP', self.earnings_vwap_current, er_date, 'reference')
 
-        return "<br>".join(summary)
+        if not summary:
+            return '<p class="market-level-empty">No nearby structure levels found.</p>'
+        return ''.join(summary)
 
     # ------------------------------------------------------------------ #
     #  Trade Plan — with recency, ATR-based SL, R:R gating

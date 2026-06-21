@@ -66,48 +66,79 @@ def generate_chart_html(
         relevant_fvgs.sort(key=lambda x: abs(((x['top'] + x['bottom']) / 2) - current_price))
         for f in relevant_fvgs[:max_fvgs]:
             midpoint = (f['top'] + f['bottom']) / 2
-            color = '#ffeb3b' if f['type'] == 'bullish' else '#ff9800'
-            title = "FVG\u2191" if f['type'] == 'bullish' else "FVG\u2193"
+            color = '#4ebe96' if f['type'] == 'bullish' else '#ffa16c'
+            title = 'Demand gap' if f['type'] == 'bullish' else 'Supply gap'
             start_time = int(f['date'].timestamp())
             fvg_lines.append({
                 'price': midpoint, 'color': color, 'title': title,
                 'start_time': start_time, 'end_time': last_candle_time,
             })
 
-    # --- EQH / EQL level lines ---
-    level_lines = _build_level_lines(df, eq_levels, current_price, max_levels)
+    # --- Structure context: enforce a one-line annotation budget ---
+    # The trade plan owns the chart. Nearby FVG/EQH/EQL context is useful, but
+    # showing several of each makes the candle read impossible.
+    level_lines = _build_level_lines(df, eq_levels, current_price, 1)
+    context_candidates = []
+    for line in fvg_lines:
+        context_candidates.append(('fvg', line, abs(line['price'] - current_price)))
+    for line in level_lines:
+        context_candidates.append(('level', line, abs(line['price'] - current_price)))
+    context_candidates.sort(key=lambda item: item[2])
+
+    if context_candidates:
+        context_type, context_line, _ = context_candidates[0]
+        fvg_lines = [context_line] if context_type == 'fvg' else []
+        level_lines = [context_line] if context_type == 'level' else []
+    else:
+        fvg_lines = []
+        level_lines = []
 
     # --- Trade plan lines ---
     plan = trade_plan
     trade_lines = [
         {'price': plan['entry'], 'color': '#4caf50', 'title': 'ENTRY', 'style': 2, 'width': 2},
         {'price': plan['sl'],    'color': '#ef5350', 'title': 'STOP',  'style': 0, 'width': 2},
-        {'price': plan['tp1'],   'color': '#2196f3', 'title': 'T1',    'style': 2, 'width': 1},
-        {'price': plan['tp2'],   'color': '#2196f3', 'title': 'T2',    'style': 2, 'width': 1},
-        {'price': plan['tp3'],   'color': '#2196f3', 'title': 'T3',    'style': 2, 'width': 1},
+        {'price': plan['tp1'],   'color': '#479ffa', 'title': 'T1',    'style': 2, 'width': 1},
+        {'price': plan['tp2'],   'color': '#479ffa', 'title': 'T2',    'style': 2, 'width': 1},
+        {'price': plan['tp3'],   'color': '#479ffa', 'title': 'T3',    'style': 2, 'width': 1},
     ]
 
-    # --- Trade plan sidebar HTML ---
+    # --- Trade brief sidebar HTML ---
+    setup_label = 'Long setup' if plan.get('valid') else 'Watch setup'
+    setup_detail = plan['type'].replace('Limit Buy ', '').replace('Aggressive ', '')
+    rr_value = f"{plan['rr_ratio']:.1f}R" if plan.get('rr_ratio') is not None else '—'
+    chart_plan_note = (
+        f"Entry ${plan['entry']:.2f} · Invalidate ${plan['sl']:.2f} · "
+        f"First target ${plan['tp1']:.2f}"
+    )
     tp_html = f"""
-    <div style="margin-top: 15px; border-top: 1px solid #363c4e; padding-top: 10px;">
-        <h3 style="color: #4caf50; margin-bottom: 5px;">🚀 BULLISH SETUP</h3>
-        <div style="font-size: 13px; color: #d1d4dc;">
-            <div><strong>Entry:</strong> <span style="color: #4caf50;">${plan['entry']:.2f}</span> ({plan['type']})</div>
-            <div><strong>Stop Loss:</strong> <span style="color: #ef5350;">${plan['sl']:.2f}</span></div>
-            <div style="margin-top: 5px;"><strong>Targets:</strong></div>
-            <div>🎯 TP1: <span style="color: #2196f3;">${plan['tp1']:.2f}</span></div>
-            <div>🎯 TP2: <span style="color: #2196f3;">${plan['tp2']:.2f}</span></div>
-            <div>🚀 TP3: <span style="color: #2196f3;">${plan['tp3']:.2f}</span></div>
+    <section class="trade-card">
+        <div class="trade-card-header">
+            <div>
+                <span class="panel-eyebrow">Trade plan</span>
+                <h2>{setup_label}</h2>
+                <p>{setup_detail}</p>
+            </div>
+            <span class="rr-chip">{rr_value}<small>to TP1</small></span>
         </div>
-    </div>
+        <div class="plan-grid">
+            <div><span>Entry</span><strong class="entry-value">${plan['entry']:.2f}</strong></div>
+            <div><span>Invalidation</span><strong class="stop-value">${plan['sl']:.2f}</strong></div>
+        </div>
+        <div class="targets">
+            <span class="targets-label">Targets</span>
+            <div><span>01</span><strong>${plan['tp1']:.2f}</strong></div>
+            <div><span>02</span><strong>${plan['tp2']:.2f}</strong></div>
+            <div><span>03</span><strong>${plan['tp3']:.2f}</strong></div>
+        </div>
+    </section>
     """
-    if plan.get('rr_ratio') is not None:
-        tp_html += f'<div style="font-size:12px;color:#787b86;margin-top:5px;">R:R = 1:{plan["rr_ratio"]:.1f}</div>'
-    summary_html = analysis_summary + tp_html
-
-    # --- Stats for sidebar ---
-    num_fvgs = len(fvgs) if fvgs else 0
-    num_levels = len(eq_levels.get('highs', [])) + len(eq_levels.get('lows', []))
+    summary_html = (
+        tp_html
+        + '<section class="market-map"><div class="market-map-header">'
+        + '<span class="panel-eyebrow">Market map</span><span>Nearest structure</span>'
+        + f'</div>{analysis_summary}</section>'
+    )
 
     # --- Serialize ---
     chart_data = json.dumps({
@@ -129,14 +160,42 @@ def generate_chart_html(
         <title>{symbol} ICT Analysis</title>
         <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
         <style>
-            body {{ background: #0a0a0a; color: #d1d4dc; font-family: -apple-system, sans-serif; margin: 0; display: flex; height: 100vh; }}
+            body {{ background: #0b0b0b; color: #ffffff; font-family: Inter Tight, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; display: flex; height: 100vh; letter-spacing: -0.03em; }}
             #chart-container {{ flex: 1; position: relative; }}
-            #sidebar {{ width: 280px; background: #1a1a2e; padding: 20px; border-left: 1px solid #363c4e; overflow-y: auto; box-shadow: -2px 0 10px rgba(0,0,0,0.3); }}
-            h2 {{ color: #2196f3; margin-top: 0; font-size: 20px; }}
-            h3 {{ color: #a0a0a0; font-size: 14px; margin-top: 20px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #363c4e; padding-bottom: 5px; }}
-            .stat-item {{ display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }}
-            .bullish {{ color: #4caf50; }}
-            .bearish {{ color: #ef5350; }}
+            #sidebar {{ flex: 0 0 clamp(370px, 29vw, 420px); background: #131313; border-left: 1px solid #303030; overflow-y: auto; }}
+            .trade-card {{ padding: 28px 26px 22px; background: #191919; border-bottom: 1px solid #303030; }}
+            .trade-card-header {{ display: flex; justify-content: space-between; gap: 15px; align-items: flex-start; }}
+            .panel-eyebrow {{ display: block; color: #ffa16c; font-size: 11px; font-weight: 600; margin-bottom: 7px; }}
+            .trade-card h2 {{ margin: 0; color: #ffffff; font-size: 23px; line-height: .95; letter-spacing: -0.08em; font-weight: 600; }}
+            .trade-card p {{ margin: 7px 0 0; color: #868f97; font-size: 12px; }}
+            .rr-chip {{ min-width: 45px; padding: 7px 6px; border: 1px solid #4ebe96; border-radius: 6px; color: #4ebe96; text-align: center; font-size: 14px; font-weight: 600; }}
+            .rr-chip small {{ display: block; margin-top: 2px; color: #868f97; font-size: 9px; font-weight: 500; }}
+            .plan-grid {{ display: grid; grid-template-columns: 1fr 1fr; margin-top: 22px; border: 1px solid #303030; border-radius: 6px; overflow: hidden; }}
+            .plan-grid div {{ padding: 13px 14px; }} .plan-grid div + div {{ border-left: 1px solid #303030; }}
+            .plan-grid span, .targets-label {{ display: block; color: #868f97; font-size: 10px; }}
+            .plan-grid strong {{ display: block; margin-top: 4px; font-size: 15px; letter-spacing: -0.05em; }}
+            .entry-value {{ color: #4ebe96; }} .stop-value {{ color: #c8746a; }}
+            .targets {{ margin-top: 19px; }} .targets-label {{ margin-bottom: 8px; }}
+            .targets div {{ display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-top: 1px solid #303030; }}
+            .targets div span {{ color: #868f97; font-size: 10px; }} .targets div strong {{ color: #ffffff; font-size: 14px; font-weight: 500; }}
+            .market-map {{ padding: 25px 26px 30px; }}
+            .market-map-header {{ display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }}
+            .market-map-header .panel-eyebrow {{ margin: 0; }} .market-map-header > span:last-child {{ color: #868f97; font-size: 10px; }}
+            .market-level {{ display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 0; border-top: 1px solid #303030; }}
+            .market-level-label {{ color: #cccccc; font-size: 12px; }}
+            .market-level-value {{ color: #ffffff; text-align: right; font-size: 13px; font-weight: 600; }}
+            .market-level-value small {{ display: block; margin-top: 2px; color: #868f97; font-size: 10px; font-weight: 400; }}
+            .market-level.resistance .market-level-value {{ color: #c8746a; }}
+            .market-level.warning .market-level-value {{ color: #ffa16c; }}
+            .market-level.support .market-level-value {{ color: #4ebe96; }}
+            .market-level.reference .market-level-value {{ color: #479ffa; }}
+            .market-level-empty {{ margin: 0; padding: 12px 0; color: #868f97; font-size: 12px; border-top: 1px solid #303030; }}
+            #er-vertical-line {{ position: absolute; top: 0; bottom: 27px; width: 0; border-left: 1px dashed rgba(255, 255, 255, 0.18); pointer-events: none; z-index: 1; display: none; }}
+            #er-axis-label {{ position: absolute; bottom: 5px; z-index: 12; display: none; transform: translateX(-50%); padding: 2px 5px; border-radius: 3px; background: #ffa16c; color: #0b0b0b; font-size: 9px; font-weight: 700; pointer-events: none; }}
+            #target-ladder {{ position: absolute; top: 0; right: 55px; bottom: 27px; z-index: 11; pointer-events: none; }}
+            .target-ladder-item {{ position: absolute; right: 0; min-width: 72px; padding: 3px 6px; border: 1px solid rgba(71,159,250,.6); border-radius: 4px; background: rgba(11,11,11,.92); color: #d9ebff; font-size: 10px; text-align: right; white-space: nowrap; }}
+            .target-ladder-item strong {{ margin-right: 4px; color: #479ffa; font-size: 9px; }}
+            @media (max-width: 920px) {{ #sidebar {{ flex-basis: 340px; }} .trade-card {{ padding: 21px 18px 18px; }} .market-map {{ padding: 21px 18px 24px; }} }}
             
             /* Floating HUD styles */
             .chart-hud {{
@@ -168,8 +227,17 @@ def generate_chart_html(
                 padding: 1px 6px;
                 border-radius: 3px;
             }}
-            .hud-legend {{
+            .hud-plan {{
                 display: flex;
+                align-items: center;
+                gap: 8px;
+                color: #b7bcc4;
+                font-size: 11px;
+                text-shadow: 0 1px 2px rgba(0,0,0,.8);
+            }}
+            .hud-plan strong {{ color: #4ebe96; font-size: 10px; letter-spacing: .02em; text-transform: uppercase; }}
+            .hud-legend {{
+                display: none;
                 flex-wrap: wrap;
                 gap: 6px;
                 max-width: 550px;
@@ -196,28 +264,15 @@ def generate_chart_html(
                     <span class="hud-symbol">{symbol}</span>
                     <span class="hud-tf">4H</span>
                 </div>
+                <div class="hud-plan"><strong>{setup_label}</strong><span>{chart_plan_note}</span></div>
                 <div class="hud-legend" id="hud-legend"></div>
             </div>
-            <div id="er-vertical-line" style="position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed rgba(255, 255, 255, 0.08); pointer-events: none; z-index: 1; display: none;"></div>
+            <div id="er-vertical-line"></div>
+            <div id="er-axis-label">E</div>
+            <div id="target-ladder"></div>
         </div>
 
-        <div id="sidebar">
-            <h2>📊 Analysis Summary</h2>
-            <div style="font-size: 13px; line-height: 1.6;">
-                {summary_html}
-            </div>
-
-            <h3>Key Levels Found</h3>
-            <div class="stat-item">
-                <span>Fair Value Gaps:</span>
-                <span>{num_fvgs}</span>
-            </div>
-            <div class="stat-item">
-                <span>EQH/EQL Zones:</span>
-                <span>{num_levels}</span>
-            </div>
-
-        </div>
+        <aside id="sidebar">{summary_html}</aside>
 
         <script>
             try {{
@@ -243,47 +298,22 @@ def generate_chart_html(
                 candlestickSeries.setData(data.candles);
 
                 const markers = [];
+                let updateErLinePosition = () => {{}};
+                let updateTargetLadder = () => {{}};
                 if (data.earnings_vwap && data.earnings_vwap.length > 0) {{
                     const erTime = data.earnings_vwap[0].time;
-                    
-                    // 1. Pinned Yellow "E" Badge at the absolute bottom of the chart
-                    chart.priceScale('left').applyOptions({{
-                        scaleMargins: {{
-                            top: 0.90, // Force series slightly up to sit beautifully inside bottom grid
-                            bottom: 0.04,
-                        }}
-                    }});
-
-                    const erMarkerSeries = chart.addLineSeries({{
-                        priceScaleId: 'left',
-                        color: 'transparent', // Invisible line
-                        priceLineVisible: false,
-                        lastValueVisible: false,
-                        crosshairMarkerVisible: false,
-                    }});
-                    erMarkerSeries.setData([
-                        {{ time: erTime, value: 0 }}
-                    ]);
-                    erMarkerSeries.setMarkers([
-                        {{
-                            time: erTime,
-                            position: 'inBar', // Places it directly on the value 0 line at the bottom
-                            color: '#f59e0b',  // TV yellow
-                            shape: 'circle',
-                            text: 'E',
-                            size: 1.2
-                        }}
-                    ]);
-
-                    // 3. TV-style thin dashed vertical line going straight up (updates dynamically on scroll/zoom)
                     const erLineDiv = document.getElementById('er-vertical-line');
-                    const updateErLinePosition = () => {{
+                    const erAxisLabel = document.getElementById('er-axis-label');
+                    updateErLinePosition = () => {{
                         const erCoordinate = chart.timeScale().timeToCoordinate(erTime);
                         if (erCoordinate === null) {{
                             erLineDiv.style.display = 'none';
+                            erAxisLabel.style.display = 'none';
                         }} else {{
                             erLineDiv.style.display = 'block';
                             erLineDiv.style.left = erCoordinate + 'px';
+                            erAxisLabel.style.display = 'block';
+                            erAxisLabel.style.left = erCoordinate + 'px';
                         }}
                     }};
 
@@ -308,18 +338,15 @@ def generate_chart_html(
 
                 if (data.fvg_lines) {{
                     data.fvg_lines.forEach((line, idx) => {{
-                        const fvgSeries = chart.addLineSeries({{
-                            color: line.color, lineWidth: 2,
-                            lineStyle: LightweightCharts.LineStyle.Solid,
-                            priceLineVisible: false, lastValueVisible: false,
-                            crosshairMarkerVisible: false
+                        const fvgLine = candlestickSeries.createPriceLine({{
+                            price: line.price,
+                            color: line.color,
+                            lineWidth: 1,
+                            lineStyle: LightweightCharts.LineStyle.Dashed,
+                            axisLabelVisible: true,
+                            title: line.title,
                         }});
-                        const lineData = [];
-                        data.candles.forEach(c => {{
-                            if (c.time >= line.start_time) {{ lineData.push({{ time: c.time, value: line.price }}); }}
-                        }});
-                        if (lineData.length > 0) fvgSeries.setData(lineData);
-                        registerSeries('fvg_' + idx, line.title, line.price, line.color, fvgSeries, 2);
+                        registerSeries('fvg_' + idx, line.title, line.price, line.color, fvgLine, 1, true);
                     }});
                 }}
 
@@ -327,36 +354,57 @@ def generate_chart_html(
 
                 if (data.level_lines) {{
                     data.level_lines.forEach((line, idx) => {{
-                        const levelSeries = chart.addLineSeries({{
-                            color: line.color, lineWidth: line.lineWidth || 1,
-                            lineStyle: line.lineStyle || LightweightCharts.LineStyle.Dashed,
-                            priceLineVisible: false, lastValueVisible: false,
-                            crosshairMarkerVisible: false
+                        const levelLine = candlestickSeries.createPriceLine({{
+                            price: line.price,
+                            color: line.color,
+                            lineWidth: 1,
+                            lineStyle: LightweightCharts.LineStyle.Dashed,
+                            axisLabelVisible: true,
+                            title: line.title,
                         }});
-                        const lineData = [];
-                        data.candles.forEach(c => {{
-                            if (c.time >= line.start_time) {{
-                                lineData.push({{ time: c.time, value: line.price }});
-                            }}
-                        }});
-                        if (lineData.length > 0) levelSeries.setData(lineData);
-                        registerSeries('level_' + idx, line.title, line.price, line.color, levelSeries, line.lineWidth || 1, true);
+                        registerSeries('level_' + idx, line.title, line.price, line.color, levelLine, 1, true);
                     }});
                 }}
 
                 if (data.trade_lines) {{
                     data.trade_lines.forEach((line, idx) => {{
-                        const tradeSeries = chart.addLineSeries({{
-                            color: line.color, lineWidth: line.width || 2,
+                        if (line.title === 'T2' || line.title === 'T3') return;
+                        const tradeLabel = line.title === 'T1' ? 'Target 1' : line.title.charAt(0) + line.title.slice(1).toLowerCase();
+                        const tradeLine = candlestickSeries.createPriceLine({{
+                            price: line.price,
+                            color: line.color,
+                            lineWidth: line.width || 2,
                             lineStyle: line.style === 2 ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Solid,
-                            priceLineVisible: false, lastValueVisible: false,
-                            crosshairMarkerVisible: false
+                            axisLabelVisible: true,
+                            title: tradeLabel,
                         }});
-                        const recentCandles = data.candles.slice(-100);
-                        const lineData = recentCandles.map(c => ({{ time: c.time, value: line.price }}));
-                        tradeSeries.setData(lineData);
-                        registerSeries('trade_' + idx, line.title, line.price, line.color, tradeSeries, line.width || 2);
+                        registerSeries('trade_' + idx, line.title, line.price, line.color, tradeLine, line.width || 2);
                     }});
+
+                    const targetLadder = document.getElementById('target-ladder');
+                    const overheadTargets = data.trade_lines.filter(line => line.title === 'T2' || line.title === 'T3');
+                    updateTargetLadder = () => {{
+                        targetLadder.innerHTML = '';
+                        const positions = overheadTargets
+                            .map(line => ({{ line, y: candlestickSeries.priceToCoordinate(line.price) }}))
+                            .filter(item => item.y !== null)
+                            .sort((a, b) => a.y - b.y);
+                        let previousTop = -Infinity;
+                        const maxTop = Math.max(18, chartContainer.clientHeight - 54);
+                        positions.forEach(item => {{
+                            let top = Math.max(18, item.y - 10);
+                            if (top < previousTop + 24) top = previousTop + 24;
+                            top = Math.min(top, maxTop);
+                            previousTop = top;
+                            const marker = document.createElement('div');
+                            marker.className = 'target-ladder-item';
+                            marker.style.top = top + 'px';
+                            marker.innerHTML = '<strong>' + item.line.title + '</strong>$' + Number(item.line.price).toFixed(2);
+                            targetLadder.appendChild(marker);
+                        }});
+                    }};
+                    chart.timeScale().subscribeVisibleLogicalRangeChange(updateTargetLadder);
+                    setTimeout(updateTargetLadder, 120);
                 }}
 
                 if (data.earnings_vwap && data.earnings_vwap.length > 0) {{
@@ -611,6 +659,8 @@ def generate_chart_html(
 
                 window.addEventListener('resize', () => {{
                     chart.resize(chartContainer.clientWidth, chartContainer.clientHeight);
+                    updateErLinePosition();
+                    updateTargetLadder();
                 }});
 
             }} catch (e) {{
