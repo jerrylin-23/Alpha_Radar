@@ -343,8 +343,8 @@ def generate_chart_html(
                             color: line.color,
                             lineWidth: 1,
                             lineStyle: LightweightCharts.LineStyle.Dashed,
-                            axisLabelVisible: true,
-                            title: line.title,
+                            axisLabelVisible: false,
+                            title: '',
                         }});
                         registerSeries('fvg_' + idx, line.title, line.price, line.color, fvgLine, 1, true);
                     }});
@@ -359,8 +359,8 @@ def generate_chart_html(
                             color: line.color,
                             lineWidth: 1,
                             lineStyle: LightweightCharts.LineStyle.Dashed,
-                            axisLabelVisible: true,
-                            title: line.title,
+                            axisLabelVisible: false,
+                            title: '',
                         }});
                         registerSeries('level_' + idx, line.title, line.price, line.color, levelLine, 1, true);
                     }});
@@ -380,10 +380,12 @@ def generate_chart_html(
                     }});
 
                     const targetLadder = document.getElementById('target-ladder');
-                    const tradePlanLabels = data.trade_lines;
+                    const futureLabels = seriesRegistry
+                        .filter(item => item.id.startsWith('trade_') || item.isLevelLine)
+                        .map(item => ({{ title: item.title, price: item.price, color: item.color }}));
                     updateTargetLadder = () => {{
                         targetLadder.innerHTML = '';
-                        const positions = tradePlanLabels
+                        const positions = futureLabels
                             .map(line => ({{ line, y: candlestickSeries.priceToCoordinate(line.price) }}))
                             .filter(item => item.y !== null)
                             .sort((a, b) => a.y - b.y);
