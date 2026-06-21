@@ -192,6 +192,7 @@ def generate_chart_html(
             .market-level-empty {{ margin: 0; padding: 12px 0; color: #868f97; font-size: 12px; border-top: 1px solid #303030; }}
             #er-vertical-line {{ position: absolute; top: 0; bottom: 27px; width: 0; border-left: 1px dashed rgba(255, 255, 255, 0.18); pointer-events: none; z-index: 1; display: none; }}
             #er-axis-label {{ position: absolute; bottom: 5px; z-index: 12; display: none; transform: translateX(-50%); padding: 2px 5px; border-radius: 3px; background: #ffa16c; color: #0b0b0b; font-size: 9px; font-weight: 700; pointer-events: none; }}
+            #projection-path {{ position: absolute; inset: 0; width: 100%; height: 100%; z-index: 9; pointer-events: none; overflow: visible; }}
             #target-ladder {{ position: absolute; top: 0; right: 55px; bottom: 27px; z-index: 11; pointer-events: none; }}
             .target-ladder-item {{ position: absolute; right: 0; min-width: 72px; padding: 3px 6px; border: 1px solid rgba(71,159,250,.6); border-radius: 4px; background: rgba(11,11,11,.92); color: #d9ebff; font-size: 10px; text-align: right; white-space: nowrap; }}
             .target-ladder-item strong {{ margin-right: 4px; color: #479ffa; font-size: 9px; }}
@@ -269,6 +270,7 @@ def generate_chart_html(
             </div>
             <div id="er-vertical-line"></div>
             <div id="er-axis-label">E</div>
+            <svg id="projection-path" aria-hidden="true"></svg>
             <div id="target-ladder"></div>
         </div>
 
@@ -326,6 +328,7 @@ def generate_chart_html(
                 const markers = [];
                 let updateErLinePosition = () => {{}};
                 let updateTargetLadder = () => {{}};
+                let updateProjectionPath = () => {{}};
                 if (data.earnings_vwap && data.earnings_vwap.length > 0) {{
                     const erTime = data.earnings_vwap[0].time;
                     const erLineDiv = document.getElementById('er-vertical-line');
@@ -434,6 +437,42 @@ def generate_chart_html(
                     }};
                     chart.timeScale().subscribeVisibleLogicalRangeChange(updateTargetLadder);
                     setTimeout(updateTargetLadder, 120);
+
+                    const projectionPath = document.getElementById('projection-path');
+                    const pricesByTitle = Object.fromEntries(
+                        data.trade_lines.map(line => [line.title, line.price])
+                    );
+                    updateProjectionPath = () => {{
+                        const lastCandle = data.candles[data.candles.length - 1];
+                        const startX = chart.timeScale().timeToCoordinate(lastCandle.time);
+                        const prices = [lastCandle.close, pricesByTitle.ENTRY, pricesByTitle.T1, pricesByTitle.T2, pricesByTitle.T3];
+                        const yValues = prices.map(price => candlestickSeries.priceToCoordinate(price));
+                        if (startX === null || yValues.some(y => y === null)) {{
+                            projectionPath.innerHTML = '';
+                            return;
+                        }}
+
+                        const maxX = chartContainer.clientWidth - 82;
+                        const availableWidth = Math.max(24, maxX - startX);
+                        const step = availableWidth / 4;
+                        const points = yValues.map((y, index) => ({{
+                            x: Math.min(maxX, startX + 6 + step * index), y
+                        }}));
+                        const segment = (from, to, color, marker) =>
+                            '<line x1="' + from.x + '" y1="' + from.y + '" x2="' + to.x + '" y2="' + to.y + '" stroke="' + color + '" stroke-width="2" stroke-linecap="round" stroke-dasharray="5 4" marker-end="url(#' + marker + ')" />';
+                        projectionPath.setAttribute('viewBox', '0 0 ' + chartContainer.clientWidth + ' ' + chartContainer.clientHeight);
+                        projectionPath.innerHTML =
+                            '<defs>' +
+                                '<marker id="path-entry" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#d5ab64" /></marker>' +
+                                '<marker id="path-target" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 Z" fill="#479ffa" /></marker>' +
+                            '</defs>' +
+                            segment(points[0], points[1], '#d5ab64', 'path-entry') +
+                            segment(points[1], points[2], '#479ffa', 'path-target') +
+                            segment(points[2], points[3], '#479ffa', 'path-target') +
+                            segment(points[3], points[4], '#479ffa', 'path-target');
+                    }};
+                    chart.timeScale().subscribeVisibleLogicalRangeChange(updateProjectionPath);
+                    setTimeout(updateProjectionPath, 140);
                 }}
 
                 if (data.earnings_vwap && data.earnings_vwap.length > 0) {{
@@ -685,7 +724,7 @@ def generate_chart_html(
                 // Reserve blank bars to the right of the last candle.  This is
                 // intentional future space for the target ladder, keeping its
                 // labels out of the live price action on initial load.
-                const futureSpaceBars = 12;
+                const futureSpaceBars = 26;
                 const lastBar = data.candles.length - 1;
                 chart.timeScale().setVisibleLogicalRange({{
                     from: Math.max(0, lastBar - 100),
@@ -696,6 +735,7 @@ def generate_chart_html(
                     chart.resize(chartContainer.clientWidth, chartContainer.clientHeight);
                     updateErLinePosition();
                     updateTargetLadder();
+                    updateProjectionPath();
                 }});
 
             }} catch (e) {{
