@@ -653,9 +653,15 @@ def generate_chart_html(
                     }}
                 }});
 
-                const lastTime = data.candles[data.candles.length - 1].time;
-                const startTime = data.candles[Math.max(0, data.candles.length - 100)].time;
-                chart.timeScale().setVisibleRange({{ from: startTime, to: lastTime }});
+                // Reserve blank bars to the right of the last candle.  This is
+                // intentional future space for the target ladder, keeping its
+                // labels out of the live price action on initial load.
+                const futureSpaceBars = 12;
+                const lastBar = data.candles.length - 1;
+                chart.timeScale().setVisibleLogicalRange({{
+                    from: Math.max(0, lastBar - 100),
+                    to: lastBar + futureSpaceBars,
+                }});
 
                 window.addEventListener('resize', () => {{
                     chart.resize(chartContainer.clientWidth, chartContainer.clientHeight);
