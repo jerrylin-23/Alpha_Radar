@@ -287,7 +287,10 @@ def generate_chart_html(
                 const chart = LightweightCharts.createChart(chartContainer, {{
                     layout: {{ background: {{ type: 'solid', color: '#0a0a0a' }}, textColor: '#d1d4dc' }},
                     grid: {{ vertLines: {{ color: '#1f2937' }}, horzLines: {{ color: '#1f2937' }} }},
-                    rightPriceScale: {{ borderColor: '#363c4e' }},
+                    rightPriceScale: {{
+                        borderColor: '#363c4e',
+                        scaleMargins: {{ top: 0.12, bottom: 0.12 }},
+                    }},
                     timeScale: {{ borderColor: '#363c4e', timeVisible: true }},
                     crosshair: {{ mode: LightweightCharts.CrosshairMode.Normal }},
                 }});
@@ -296,6 +299,29 @@ def generate_chart_html(
                     upColor: '#26a69a', downColor: '#ef5350', borderVisible: false, wickUpColor: '#26a69a', wickDownColor: '#ef5350'
                 }});
                 candlestickSeries.setData(data.candles);
+
+                // Price lines do not participate in Lightweight Charts'
+                // auto-scaling. Add an invisible range anchor so the initial
+                // y-axis includes the full trade plan with deliberate headroom.
+                const visibleCandles = data.candles.slice(Math.max(0, data.candles.length - 100));
+                const planPrices = (data.trade_lines || []).map(line => line.price);
+                const scalePrices = [
+                    ...planPrices,
+                    ...visibleCandles.map(candle => candle.low),
+                    ...visibleCandles.map(candle => candle.high),
+                ];
+                const scaleLow = Math.min(...scalePrices);
+                const scaleHigh = Math.max(...scalePrices);
+                const scalePadding = Math.max((scaleHigh - scaleLow) * 0.08, scaleHigh * 0.003);
+                const scaleAnchor = chart.addLineSeries({{
+                    color: 'rgba(0, 0, 0, 0)', lineWidth: 1,
+                    lastValueVisible: false, priceLineVisible: false,
+                    crosshairMarkerVisible: false,
+                }});
+                scaleAnchor.setData([
+                    {{ time: visibleCandles[0].time, value: scaleLow - scalePadding }},
+                    {{ time: visibleCandles[visibleCandles.length - 1].time, value: scaleHigh + scalePadding }},
+                ]);
 
                 const markers = [];
                 let updateErLinePosition = () => {{}};
