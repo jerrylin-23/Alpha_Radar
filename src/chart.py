@@ -368,24 +368,22 @@ def generate_chart_html(
 
                 if (data.trade_lines) {{
                     data.trade_lines.forEach((line, idx) => {{
-                        if (line.title.startsWith('T')) return;
-                        const tradeLabel = line.title.charAt(0) + line.title.slice(1).toLowerCase();
                         const tradeLine = candlestickSeries.createPriceLine({{
                             price: line.price,
                             color: line.color,
                             lineWidth: line.width || 2,
                             lineStyle: line.style === 2 ? LightweightCharts.LineStyle.Dashed : LightweightCharts.LineStyle.Solid,
-                            axisLabelVisible: true,
-                            title: tradeLabel,
+                            axisLabelVisible: false,
+                            title: '',
                         }});
                         registerSeries('trade_' + idx, line.title, line.price, line.color, tradeLine, line.width || 2);
                     }});
 
                     const targetLadder = document.getElementById('target-ladder');
-                    const overheadTargets = data.trade_lines.filter(line => line.title.startsWith('T'));
+                    const tradePlanLabels = data.trade_lines;
                     updateTargetLadder = () => {{
                         targetLadder.innerHTML = '';
-                        const positions = overheadTargets
+                        const positions = tradePlanLabels
                             .map(line => ({{ line, y: candlestickSeries.priceToCoordinate(line.price) }}))
                             .filter(item => item.y !== null)
                             .sort((a, b) => a.y - b.y);
@@ -399,7 +397,10 @@ def generate_chart_html(
                             const marker = document.createElement('div');
                             marker.className = 'target-ladder-item';
                             marker.style.top = top + 'px';
+                            marker.style.borderColor = item.line.color + '99';
+                            marker.style.color = item.line.color;
                             marker.innerHTML = '<strong>' + item.line.title + '</strong>$' + Number(item.line.price).toFixed(2);
+                            marker.querySelector('strong').style.color = item.line.color;
                             targetLadder.appendChild(marker);
                         }});
                     }};
