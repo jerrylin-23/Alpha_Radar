@@ -368,8 +368,8 @@ def generate_chart_html(
 
                 if (data.trade_lines) {{
                     data.trade_lines.forEach((line, idx) => {{
-                        if (line.title === 'T2' || line.title === 'T3') return;
-                        const tradeLabel = line.title === 'T1' ? 'Target 1' : line.title.charAt(0) + line.title.slice(1).toLowerCase();
+                        if (line.title.startsWith('T')) return;
+                        const tradeLabel = line.title.charAt(0) + line.title.slice(1).toLowerCase();
                         const tradeLine = candlestickSeries.createPriceLine({{
                             price: line.price,
                             color: line.color,
@@ -382,7 +382,7 @@ def generate_chart_html(
                     }});
 
                     const targetLadder = document.getElementById('target-ladder');
-                    const overheadTargets = data.trade_lines.filter(line => line.title === 'T2' || line.title === 'T3');
+                    const overheadTargets = data.trade_lines.filter(line => line.title.startsWith('T'));
                     updateTargetLadder = () => {{
                         targetLadder.innerHTML = '';
                         const positions = overheadTargets
