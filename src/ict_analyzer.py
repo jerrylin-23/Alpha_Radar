@@ -476,15 +476,23 @@ class ICTAnalyzer:
                 label += " mitigated"
             setup_type = f"Limit Buy ({label})"
 
-        # Stop Loss — ATR-based buffer
+        # Stop Loss — immediate-reaction risk model
+        #
+        # A buy-the-dip setup is looking for price to react promptly from the
+        # zone.  Keeping a stop below the full, wide source zone turns a missed
+        # reaction into a multi-percent hold.  Start below the structure, then
+        # cap the risk to the tighter of 0.75 ATR or 1.5% of entry.  The small
+        # floor avoids a stop that sits inside ordinary spread/noise.
         if entry_obj:
-            sl_price = entry_obj['bottom'] - 0.5 * atr_val
+            structural_stop = entry_obj['bottom'] - 0.25 * atr_val
         else:
-            sl_price = entry_price - 1.5 * atr_val
+            structural_stop = entry_price - 0.75 * atr_val
 
-        # Minimum risk floor
-        if (entry_price - sl_price) / entry_price < 0.005:
-            sl_price = entry_price - atr_val
+        min_stop_distance = max(entry_price * 0.0035, atr_val * 0.15)
+        max_stop_distance = min(entry_price * 0.015, atr_val * 0.75)
+        stop_distance = entry_price - structural_stop
+        stop_distance = min(max(stop_distance, min_stop_distance), max_stop_distance)
+        sl_price = entry_price - stop_distance
 
         risk = entry_price - sl_price
 
