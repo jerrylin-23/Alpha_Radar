@@ -80,14 +80,20 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* ===== Navbar ===== */}
       <nav className="navbar">
         <div className="brand">
-          <div className="brand-icon">📡</div>
-          <h1>Alpha Radar</h1>
-          <span className="tag">Live</span>
+          <div className="brand-mark" aria-hidden="true"><i /><i /><i /></div>
+          <div>
+            <h1>Alpha Radar</h1>
+            <span className="brand-subtitle">Market structure intelligence</span>
+          </div>
+        </div>
+        <div className="nav-links" aria-label="Primary navigation">
+          <button className={view === "chart" ? "active" : ""} onClick={() => setView("chart")}>Terminal</button>
+          <button className={view === "scanner" ? "active" : ""} onClick={runScan}>Scanner</button>
         </div>
         <div className="search">
+          <label htmlFor="ticker-input">Symbol</label>
           <input
             id="ticker-input"
             type="text"
@@ -106,54 +112,79 @@ export default function App() {
           >
             {analyzing ? (
               <>
-                Analyzing
+                Reading tape
                 <span className="spinner sm" />
               </>
             ) : (
-              <>Analyze</>
+              <>Run analysis <span aria-hidden="true">↗</span></>
             )}
           </button>
         </div>
       </nav>
 
-      {/* ===== Toolbar ===== */}
       <div className="toolbar">
-        <button
-          id="tab-chart"
-          className={view === "chart" ? "active" : ""}
-          onClick={() => setView("chart")}
-        >
-          Chart
-        </button>
-        <button
-          id="tab-scanner"
-          className={view === "scanner" ? "active" : ""}
-          onClick={runScan}
-        >
-          Market Scanner
-        </button>
+        <span className="live-dot" />
+        <span>US markets</span>
+        <span className="toolbar-divider" />
+        <span>ICT structure engine</span>
+        <span className="toolbar-spacer" />
+        <span className="toolbar-time">Realtime scanner</span>
       </div>
 
-      {/* ===== Content ===== */}
       <div className="content">
         {view === "chart" ? (
           chartHtml ? (
             <iframe ref={frameRef} className="chart-frame" title="chart" />
           ) : (
             <div className="placeholder">
-              <span className="icon">📡</span>
-              <p>Enter a ticker symbol to generate an automated ICT trade plan</p>
-              <span className="hint">
-                Try <kbd>NVDA</kbd> <kbd>AAPL</kbd> <kbd>SPY</kbd>
-              </span>
+              <section className="terminal-intro">
+                <div className="intro-copy">
+                  <span className="eyebrow">Alpha Radar / Terminal</span>
+                  <h2>Less chart.<br /><em>More conviction.</em></h2>
+                  <p>A decision brief that keeps the price action, levels, and trade thesis in one focused view.</p>
+                  <div className="quick-symbols">
+                    <span>Start with</span>
+                    {["NVDA", "AAPL", "SPY"].map((ticker) => (
+                      <button key={ticker} onClick={() => analyze(ticker)}>{ticker}</button>
+                    ))}
+                  </div>
+                </div>
+                <article className="research-brief" aria-label="Example NVDA research brief">
+                  <header className="brief-topbar">
+                    <div><span className="brief-kicker">Research brief</span><strong>NVDA</strong><span className="brief-company">NVIDIA Corp.</span></div>
+                    <span className="demo-chip">Illustrative</span>
+                  </header>
+                  <div className="brief-price-row">
+                    <div><span>Current price</span><strong>$181.64</strong><em>+1.84% today</em></div>
+                    <div className="brief-score"><span>Setup quality</span><strong>74<span>/100</span></strong></div>
+                  </div>
+                  <div className="brief-chart">
+                    <div className="brief-chart-header"><span>Market structure</span><span>4H</span></div>
+                    <span className="brief-gridline grid-a" /><span className="brief-gridline grid-b" /><span className="brief-gridline grid-c" />
+                    <span className="target-line target-one"><b>Target 1</b> $186.20</span>
+                    <span className="entry-line"><b>Entry</b> $178.40</span>
+                    <span className="stop-line"><b>Invalidation</b> $174.60</span>
+                    <svg viewBox="0 0 620 190" preserveAspectRatio="none" aria-hidden="true"><path className="brief-area" d="M0 158 C25 149 38 165 61 144 S95 125 120 135 S152 152 176 129 S213 124 237 98 S279 95 302 112 S332 130 355 83 S390 90 414 64 S452 102 478 70 S515 57 542 38 S584 45 620 17 L620 190 L0 190 Z" /><path className="brief-line" d="M0 158 C25 149 38 165 61 144 S95 125 120 135 S152 152 176 129 S213 124 237 98 S279 95 302 112 S332 130 355 83 S390 90 414 64 S452 102 478 70 S515 57 542 38 S584 45 620 17" /></svg>
+                    <span className="brief-now">NOW $181.64</span>
+                  </div>
+                  <div className="brief-plan">
+                    <div><span>Bias</span><strong className="positive">Long</strong></div>
+                    <div><span>Entry zone</span><strong>$178.40</strong></div>
+                    <div><span>Risk / reward</span><strong className="positive">2.8R</strong></div>
+                  </div>
+                  <footer className="brief-thesis"><span className="thesis-dot" />Liquidity swept below the prior low. Price is reclaiming the 4H order block.</footer>
+                </article>
+              </section>
+              <div className="placeholder-footnote"><span>01</span> Research brief demo · Select a symbol to open its full market structure report</div>
             </div>
           )
         ) : (
           <div className="scanner">
             <div className="scanner-header">
-              <h2>Market Scanner</h2>
+              <span className="eyebrow">Market scanner</span>
+              <h2>Setups approaching<br /><em>the buy zone.</em></h2>
               <p className="sub">
-                Tickers approaching entry — within ~1.5% of calculated setup
+                Tickers approaching entry within ~1.5% of calculated setup
                 price
               </p>
             </div>
@@ -165,11 +196,11 @@ export default function App() {
                   className={`status-dot${isScanning ? " scanning" : ""}`}
                 />
                 <span>
-                  {isScanning ? "Scanning markets…" : "Scanner idle"}
+                  {isScanning ? "Scanning markets" : "Scanner ready"}
                 </span>
                 <span>Last scan: {lastScan}</span>
                 <span className="status-count">
-                  {results?.filter(r => r.near_entry).length ?? 0} near buy zone | {results?.length ?? 0} active setups
+                  {results?.filter(r => r.near_entry).length ?? 0} near zone / {results?.length ?? 0} active setups
                 </span>
               </div>
             )}
@@ -195,40 +226,18 @@ export default function App() {
               const displayedResults = filterNearEntry ? results.filter(r => r.near_entry) : results;
               return (
                 <>
-                  <div style={{ display: "flex", gap: "6px", marginBottom: "1.25rem", background: "rgba(30, 41, 59, 0.4)", padding: "4px", borderRadius: "8px", width: "fit-content", border: "1px solid var(--border)" }}>
+                  <div className="scan-filters">
                     <button
                       className={`tab-btn ${filterNearEntry ? "active" : ""}`}
-                      style={{
-                        background: filterNearEntry ? "var(--accent)" : "transparent",
-                        border: "none",
-                        color: filterNearEntry ? "#fff" : "var(--text-secondary)",
-                        padding: "6px 16px",
-                        borderRadius: "6px",
-                        fontSize: "0.8rem",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        transition: "all 0.2s"
-                      }}
                       onClick={() => setFilterNearEntry(true)}
                     >
-                      🎯 Near Entry ({results.filter(r => r.near_entry).length})
+                      Near entry <span>{results.filter(r => r.near_entry).length}</span>
                     </button>
                     <button
                       className={`tab-btn ${!filterNearEntry ? "active" : ""}`}
-                      style={{
-                        background: !filterNearEntry ? "var(--accent)" : "transparent",
-                        border: "none",
-                        color: !filterNearEntry ? "#fff" : "var(--text-secondary)",
-                        padding: "6px 16px",
-                        borderRadius: "6px",
-                        fontSize: "0.8rem",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        transition: "all 0.2s"
-                      }}
                       onClick={() => setFilterNearEntry(false)}
                     >
-                      🌐 All Setups ({results.length})
+                      All setups <span>{results.length}</span>
                     </button>
                   </div>
 
