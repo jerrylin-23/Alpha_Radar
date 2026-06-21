@@ -475,20 +475,49 @@ class ICTAnalyzer:
         if (entry_price - sl_price) / entry_price < 0.005:
             sl_price = entry_price - atr_val
 
-        # Take Profits
-        eqh_levels = sorted([l['price'] for l in self.eq_levels.get('highs', []) if l['price'] > entry_price])
         risk = entry_price - sl_price
 
-        tp1 = eqh_levels[0] if eqh_levels else entry_price + risk * 1.5
-        tp2 = eqh_levels[1] if len(eqh_levels) > 1 else entry_price + risk * 2.5
-        tp3 = entry_price + risk * 3.5
+        # Take profits should be actual destinations, not the first price line
+        # above entry.  A nearby EQH can be useful context, but a target that is
+        # only a few cents away is not a trade a person could realistically plan
+        # around after spread, slippage, and normal 4H noise.
+        #
+        # Require the first objective to offer at least 1.5R *and* roughly one
+        # ATR of room.  Prefer liquidity pools (EQH) and then swing highs that
+        # clear that distance; use an ATR/R ladder only when no such structure
+        # exists.  This keeps the targets tied to price action without letting a
+        # trivial nearby level collapse the trade plan.
+        min_tp1_distance = max(risk * 1.5, atr_val)
+        min_target_spacing = max(risk, atr_val * 0.75)
 
-        tps = sorted(set([tp1, tp2, tp3]))
-        if len(tps) >= 3:
-            tp1, tp2, tp3 = tps[0], tps[1], tps[2]
-        elif len(tps) == 2:
-            tp1, tp2 = tps[0], tps[1]
-            tp3 = entry_price + risk * 3.5
+        eqh_prices = [l['price'] for l in self.eq_levels.get('highs', [])]
+        swing_high_prices = self.df.loc[
+            self.df.get('swing_high', False) == True, 'High'
+        ].tolist()
+        liquidity_targets = sorted({
+            float(price) for price in eqh_prices + swing_high_prices
+            if price >= entry_price + min_tp1_distance
+        })
+
+        tp1 = liquidity_targets[0] if liquidity_targets else entry_price + min_tp1_distance
+        later_targets = [
+            price for price in liquidity_targets
+            if price >= tp1 + min_target_spacing
+        ]
+        tp2 = (
+            later_targets[0]
+            if later_targets
+            else max(entry_price + risk * 2.5, tp1 + min_target_spacing)
+        )
+        final_targets = [
+            price for price in later_targets
+            if price >= tp2 + min_target_spacing
+        ]
+        tp3 = (
+            final_targets[0]
+            if final_targets
+            else max(entry_price + risk * 3.5, tp2 + min_target_spacing)
+        )
 
         # R:R ratio
         rr_ratio = (tp1 - entry_price) / risk if risk > 0 else 0
