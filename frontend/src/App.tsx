@@ -1,7 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { analyzeSymbol, fetchScanAll, fetchScanStatus, type ScanResult, type ScanStatusResponse } from "./api";
 
 type View = "chart" | "scanner";
+type SortKey = "symbol" | "price" | "entry" | "dist" | "setup" | "rr_ratio";
+type SortDirection = "asc" | "desc";
+
+const sortColumns: Array<{ key: SortKey; label: string }> = [
+  { key: "symbol", label: "Symbol" },
+  { key: "price", label: "Price" },
+  { key: "entry", label: "Entry" },
+  { key: "dist", label: "Distance" },
+  { key: "setup", label: "Setup" },
+  { key: "rr_ratio", label: "R:R" },
+];
 
 /** Map setup type strings to badge style class + label */
 function setupBadge(setup: string) {
@@ -26,6 +37,8 @@ export default function App() {
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanStatus, setScanStatus] = useState<ScanStatusResponse | null>(null);
   const [filterNearEntry, setFilterNearEntry] = useState(true);
+  const [sortKey, setSortKey] = useState<SortKey>("dist");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
 
   const frameRef = useRef<HTMLIFrameElement>(null);
 
@@ -77,6 +90,32 @@ export default function App() {
     ? new Date(scanStatus.last_scan).toLocaleTimeString()
     : "—";
   const isScanning = scanStatus?.is_scanning ?? false;
+  const displayedResults = useMemo(() => {
+    if (!results) return [];
+    const filtered = filterNearEntry ? results.filter((result) => result.near_entry) : results;
+
+    return [...filtered].sort((left, right) => {
+      const leftValue = left[sortKey];
+      const rightValue = right[sortKey];
+
+      if (leftValue == null) return 1;
+      if (rightValue == null) return -1;
+
+      const comparison = typeof leftValue === "string"
+        ? leftValue.localeCompare(String(rightValue))
+        : Number(leftValue) - Number(rightValue);
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+  }, [filterNearEntry, results, sortDirection, sortKey]);
+
+  const toggleSort = (key: SortKey) => {
+    if (key === sortKey) {
+      setSortDirection((direction) => direction === "asc" ? "desc" : "asc");
+      return;
+    }
+    setSortKey(key);
+    setSortDirection("asc");
+  };
 
   return (
     <div className="app">
@@ -223,7 +262,6 @@ export default function App() {
 
             {/* Results table */}
             {!scanning && !scanError && results && results.length > 0 && (() => {
-              const displayedResults = filterNearEntry ? results.filter(r => r.near_entry) : results;
               return (
                 <>
                   <div className="scan-filters">
@@ -245,12 +283,25 @@ export default function App() {
                     <table>
                       <thead>
                         <tr>
-                          <th>Symbol</th>
-                          <th>Price</th>
-                          <th>Entry</th>
-                          <th>Distance</th>
-                          <th>Setup</th>
-                          <th>R:R</th>
+                          {sortColumns.map((column) => {
+                            const isActive = sortKey === column.key;
+                            return (
+                              <th
+                                key={column.key}
+                                aria-sort={isActive ? (sortDirection === "asc" ? "ascending" : "descending") : "none"}
+                              >
+                                <button
+                                  className={`sort-header ${isActive ? "active" : ""}`}
+                                  onClick={() => toggleSort(column.key)}
+                                >
+                                  {column.label}
+                                  <span aria-hidden="true" className="sort-indicator">
+                                    {isActive ? (sortDirection === "asc" ? "↑" : "↓") : "↕"}
+                                  </span>
+                                </button>
+                              </th>
+                            );
+                          })}
                           <th></th>
                         </tr>
                       </thead>
